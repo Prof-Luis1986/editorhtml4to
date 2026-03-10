@@ -177,6 +177,12 @@ const clearSessionButton = document.getElementById("clearSessionButton");
 const newProjectButton = document.getElementById("newProjectButton");
 const projectsList = document.getElementById("projectsList");
 const projectsEmptyText = document.getElementById("projectsEmptyText");
+const editorShell = document.querySelector(".editor-shell");
+const workspaceMain = document.querySelector(".workspace-main");
+const workspaceResizeHandle = document.getElementById("workspaceResizeHandle");
+const focusEditorButton = document.getElementById("focusEditorButton");
+const splitViewButton = document.getElementById("splitViewButton");
+const focusPreviewButton = document.getElementById("focusPreviewButton");
 const params = new URLSearchParams(window.location.search);
 
 let db = null;
@@ -193,6 +199,7 @@ let activeFileId = "";
 let activeProjectId = "";
 let activeProjectName = "";
 let autocompleteState = { items: [], selectedIndex: 0, start: 0, end: 0, visible: false };
+let workspaceResizeCleanup = null;
 
 const sessionPlayerId = slugify(params.get("player") || "", 36);
 const sessionDraftKey = `${SESSION_DRAFT_PREFIX}${sessionPlayerId || "anon"}`;
@@ -283,6 +290,69 @@ function setProjectStatus(text, kind = "") {
 
 function setCloudStatus(text) {
   if (cloudStatusText) cloudStatusText.textContent = `Nube: ${text}`;
+}
+
+function syncWorkspaceModeButtons(mode) {
+  const controls = [
+    { button: focusEditorButton, mode: "editor" },
+    { button: splitViewButton, mode: "split" },
+    { button: focusPreviewButton, mode: "preview" }
+  ];
+
+  for (const control of controls) {
+    if (!control.button) continue;
+    const active = control.mode === mode;
+    control.button.classList.toggle("is-active", active);
+    control.button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+}
+
+function setWorkspaceMode(mode = "split") {
+  if (!editorShell) return;
+  const safeMode = ["editor", "split", "preview"].includes(mode) ? mode : "split";
+  editorShell.dataset.workspaceMode = safeMode;
+  syncWorkspaceModeButtons(safeMode);
+}
+
+function setWorkspaceRatio(ratio = 0.54) {
+  if (!workspaceMain) return;
+  const safeRatio = Math.min(0.72, Math.max(0.34, ratio));
+  workspaceMain.style.setProperty("--editor-pane", `minmax(0, ${safeRatio}fr)`);
+  workspaceMain.style.setProperty("--preview-pane", `minmax(320px, ${Math.max(0.5, 1.3 - safeRatio)}fr)`);
+}
+
+function bindWorkspaceResizer() {
+  if (!workspaceResizeHandle || !workspaceMain || typeof window === "undefined") return;
+
+  workspaceResizeHandle.addEventListener("pointerdown", (event) => {
+    if (window.innerWidth <= 1024) return;
+    event.preventDefault();
+    if (workspaceResizeCleanup) workspaceResizeCleanup();
+    setWorkspaceMode("split");
+    workspaceResizeHandle.setPointerCapture?.(event.pointerId);
+
+    const updateFromPointer = (clientX) => {
+      const rect = workspaceMain.getBoundingClientRect();
+      const nextRatio = (clientX - rect.left) / rect.width;
+      setWorkspaceRatio(nextRatio);
+    };
+
+    updateFromPointer(event.clientX);
+
+    const handlePointerMove = (moveEvent) => {
+      updateFromPointer(moveEvent.clientX);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      workspaceResizeCleanup = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+    workspaceResizeCleanup = handlePointerUp;
+  });
 }
 
 function formatSavedAt(isoDate) {
@@ -1607,6 +1677,24 @@ if (newJsFileButton) {
   });
 }
 
+if (focusEditorButton) {
+  focusEditorButton.addEventListener("click", () => {
+    setWorkspaceMode("editor");
+  });
+}
+
+if (splitViewButton) {
+  splitViewButton.addEventListener("click", () => {
+    setWorkspaceMode("split");
+  });
+}
+
+if (focusPreviewButton) {
+  focusPreviewButton.addEventListener("click", () => {
+    setWorkspaceMode("preview");
+  });
+}
+
 if (runButton) {
   runButton.addEventListener("click", async () => {
     renderPreview();
@@ -1837,6 +1925,9 @@ if (!htmlInput || !previewFrame) {
   console.warn("Editor HTML Kids: faltan elementos del DOM. Recarga la pagina.");
 } else {
   applyReturnAccessPolicy();
+  setWorkspaceMode(editorShell?.dataset.workspaceMode || "split");
+  setWorkspaceRatio(0.56);
+  bindWorkspaceResizer();
   if (backLink && !backLink.classList.contains("is-disabled")) backLink.href = buildReturnUrl();
   renderImageResources();
   await bootstrapProgress();
