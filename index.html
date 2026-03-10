@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor HTML Kids | Proyecto Aislado</title>
+    <link rel="stylesheet" href="editor.css" />
+  </head>
+  <body>
+    <main class="editor-shell">
+      <header class="editor-topbar">
+        <div>
+          <h1>Laboratorio HTML Kids</h1>
+          <p>Proyecto web independiente para escribir codigo y ver el resultado en vivo.</p>
+        </div>
+        <div class="topbar-actions">
+          <a class="back-link is-disabled" href="#" aria-disabled="true" tabindex="-1">Proyecto independiente</a>
+          <button id="exitWithoutSaveButton" type="button">Salir sin guardar</button>
+        </div>
+      </header>
+
+      <section class="challenge-panel" aria-live="polite">
+        <h2>Cuenta y respaldo</h2>
+        <div class="auth-panel-grid">
+          <div class="auth-actions">
+            <button id="signInGoogleButton" type="button">Entrar con Google</button>
+            <button id="signOutButton" type="button">Cerrar sesión</button>
+          </div>
+          <div class="account-summary">
+            <p id="authStatusText" class="saved-at">Sin iniciar sesión.</p>
+            <p id="projectStatusText" class="saved-at">Proyecto activo: ninguno.</p>
+          </div>
+        </div>
+        <p id="savedAtText" class="saved-at">Sin guardar todavía.</p>
+        <p id="cloudStatusText" class="saved-at">Nube: pendiente.</p>
+      </section>
+
+      <section class="workspace">
+        <aside class="projects-sidebar" aria-label="Proyectos guardados">
+          <h2>Mis proyectos</h2>
+          <p class="projects-sidebar-hint">Inicia sesión con Google para crear, guardar y abrir solo tus proyectos.</p>
+          <button id="newProjectButton" type="button">Nuevo proyecto</button>
+          <button id="clearSessionButton" type="button">Cerrar sesión</button>
+          <div id="projectsList" class="projects-list"></div>
+          <p id="projectsEmptyText" class="saved-at">Aun no hay proyectos guardados.</p>
+        </aside>
+
+        <div class="code-column">
+          <label for="htmlInput">Editor de codigo (tema oscuro)</label>
+          <div class="file-toolbar">
+            <div id="fileTabs" class="file-tabs" aria-label="Archivos del proyecto"></div>
+            <div class="file-actions">
+              <button id="newHtmlFileButton" type="button">Nuevo .html</button>
+              <button id="newCssFileButton" type="button">Nuevo .css</button>
+              <button id="newJsFileButton" type="button">Nuevo .js</button>
+            </div>
+          </div>
+          <div class="editor-stack">
+            <div id="lineNumbers" class="line-numbers" aria-hidden="true"></div>
+            <pre id="codeHighlight" aria-hidden="true"></pre>
+            <textarea id="htmlInput" spellcheck="false"></textarea>
+            <ul id="autocompleteList" class="autocomplete-list" hidden></ul>
+          </div>
+          <div class="actions-row">
+            <button id="runButton" type="button">Ejecutar</button>
+            <button id="saveButton" type="button">Guardar progreso</button>
+            <button id="openHtmlButton" type="button">Abrir archivo</button>
+            <button id="exportHtmlButton" type="button">Guardar archivo</button>
+            <button id="resetButton" type="button">Reiniciar</button>
+            <button id="undoResetButton" type="button" disabled>Deshacer reinicio</button>
+            <button id="autocompleteButton" type="button">Autocompletar base</button>
+            <button id="hintButton" type="button">Mostrar pista</button>
+          </div>
+          <input id="htmlFileInput" type="file" accept=".html,.htm,.css,.js,text/html,text/css,text/javascript,application/javascript" hidden />
+          <p id="hintText" class="hint" hidden>Pista: empieza con &lt;h1&gt;, luego agrega un &lt;p&gt; y una imagen con &lt;img&gt;.</p>
+          <section class="resource-panel" aria-label="Recursos de imagen">
+            <div class="resource-panel-header">
+              <h3>Recursos de imagen</h3>
+              <p>Haz clic en una imagen o pega una URL directa para insertarla como etiqueta &lt;img&gt;.</p>
+            </div>
+            <div class="image-import-tools">
+              <label class="image-url-label" for="imageUrlInput">URL directa de imagen</label>
+              <div class="image-url-row">
+                <input id="imageUrlInput" type="url" placeholder="https://ejemplo.com/foto.jpg" />
+                <button id="insertImageUrlButton" type="button">Insertar URL</button>
+              </div>
+            </div>
+            <div id="imageResourceGrid" class="image-resource-grid"></div>
+            <p id="resourceStatusText" class="saved-at">Selecciona una imagen para agregarla al editor.</p>
+          </section>
+        </div>
+
+        <div class="preview-column">
+          <h2>Vista previa</h2>
+          <iframe id="previewFrame" title="Vista previa HTML" sandbox="allow-scripts"></iframe>
+        </div>
+      </section>
+    </main>
+
+    <script src="firebase-config.js"></script>
+    <script type="module" src="editor.js?v=1"></script>
+  </body>
+</html>
