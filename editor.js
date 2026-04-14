@@ -637,6 +637,16 @@ function getFilteredResources() {
   });
 }
 
+function groupResourcesByCategory(resources = []) {
+  const groups = new Map();
+  for (const resource of resources) {
+    const key = resource.category || "General";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(resource);
+  }
+  return Array.from(groups.entries()).map(([category, items]) => ({ category, items }));
+}
+
 function renderResourceTypeButtons() {
   if (!resourceTypeButtons) return;
   const types = ["all", "imagen", "audio", "documento"];
@@ -763,40 +773,136 @@ function renderResourceLibrary() {
   renderResourceCategories(filteredResources);
   resourceLibraryGrid.innerHTML = "";
 
-  for (const resource of filteredResources) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "image-resource-card";
-    button.setAttribute("aria-label", `Insertar recurso ${resource.label}`);
+  const sections = groupResourcesByCategory(filteredResources);
 
-    let media;
-    if (resource.type === "imagen") {
-      const thumb = document.createElement("img");
-      thumb.className = "image-resource-thumb";
-      thumb.src = resource.url;
-      thumb.alt = resource.alt;
-      thumb.loading = "lazy";
-      media = thumb;
-    } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "resource-placeholder";
-      placeholder.textContent = resource.type === "audio" ? "AUDIO" : "DOC";
-      media = placeholder;
+  for (const section of sections) {
+    const sectionElement = document.createElement("section");
+    sectionElement.className = "resource-gallery-section";
+
+    const header = document.createElement("div");
+    header.className = "resource-gallery-header";
+
+    const titleWrap = document.createElement("div");
+    const title = document.createElement("h4");
+    title.className = "resource-gallery-title";
+    title.textContent = section.category;
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "resource-gallery-subtitle";
+    subtitle.textContent = `${section.items.length} recurso${section.items.length === 1 ? "" : "s"} disponibles`;
+
+    titleWrap.append(title, subtitle);
+
+    const badge = document.createElement("span");
+    badge.className = "resource-gallery-badge";
+    badge.textContent = getResourceTypeLabel(section.items[0]?.type || "all");
+
+    header.append(titleWrap, badge);
+
+    const grid = document.createElement("div");
+    grid.className = "image-resource-grid";
+
+    for (const resource of section.items) {
+      const card = document.createElement("article");
+      card.className = "image-resource-card";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `Insertar recurso ${resource.label}`);
+
+      let media;
+      if (resource.type === "imagen") {
+        const thumb = document.createElement("img");
+        thumb.className = "image-resource-thumb";
+        thumb.src = resource.url;
+        thumb.alt = resource.alt;
+        thumb.loading = "lazy";
+        media = thumb;
+      } else if (resource.type === "audio") {
+        const audioBox = document.createElement("div");
+        audioBox.className = "resource-audio-box";
+
+        const audioIcon = document.createElement("div");
+        audioIcon.className = "resource-placeholder is-audio";
+        audioIcon.textContent = "AUDIO";
+
+        const audioPlayer = document.createElement("audio");
+        audioPlayer.className = "resource-audio-player";
+        audioPlayer.controls = true;
+        audioPlayer.preload = "none";
+        audioPlayer.src = resource.url;
+        audioPlayer.addEventListener("click", (event) => event.stopPropagation());
+
+        audioBox.append(audioIcon, audioPlayer);
+        media = audioBox;
+      } else {
+        const docBox = document.createElement("div");
+        docBox.className = "resource-doc-box";
+
+        const placeholder = document.createElement("div");
+        placeholder.className = "resource-placeholder is-document";
+        placeholder.textContent = "DOC";
+
+        const openLink = document.createElement("a");
+        openLink.className = "resource-open-link";
+        openLink.href = resource.url;
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        openLink.textContent = "Abrir";
+        openLink.addEventListener("click", (event) => event.stopPropagation());
+
+        docBox.append(placeholder, openLink);
+        media = docBox;
+      }
+
+      const content = document.createElement("div");
+      content.className = "resource-card-body";
+
+      const typePill = document.createElement("span");
+      typePill.className = "resource-type-pill";
+      typePill.textContent = getResourceTypeLabel(resource.type);
+
+      const label = document.createElement("h5");
+      label.className = "image-resource-label";
+      label.textContent = resource.label;
+
+      const meta = document.createElement("p");
+      meta.className = "resource-card-meta";
+      meta.textContent = resource.extension ? `Archivo .${resource.extension}` : "Recurso local";
+
+      const actions = document.createElement("div");
+      actions.className = "resource-card-actions";
+
+      const helper = document.createElement("span");
+      helper.className = "resource-card-helper";
+      helper.textContent = "Clic en la tarjeta o usa el boton";
+
+      const insertButton = document.createElement("button");
+      insertButton.type = "button";
+      insertButton.className = "resource-insert-button";
+      insertButton.textContent = "Insertar";
+      insertButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        insertLibraryResource(resource);
+      });
+
+      actions.append(helper, insertButton);
+      content.append(typePill, label, meta, actions);
+      card.append(media, content);
+
+      card.addEventListener("click", () => {
+        insertLibraryResource(resource);
+      });
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          insertLibraryResource(resource);
+        }
+      });
+      grid.appendChild(card);
     }
 
-    const label = document.createElement("span");
-    label.className = "image-resource-label";
-    label.textContent = `${resource.label} · ${getResourceTypeLabel(resource.type)}`;
-
-    const meta = document.createElement("span");
-    meta.className = "resource-card-meta";
-    meta.textContent = resource.category;
-
-    button.append(media, label, meta);
-    button.addEventListener("click", () => {
-      insertLibraryResource(resource);
-    });
-    resourceLibraryGrid.appendChild(button);
+    sectionElement.append(header, grid);
+    resourceLibraryGrid.appendChild(sectionElement);
   }
 
   if (!filteredResources.length) {
