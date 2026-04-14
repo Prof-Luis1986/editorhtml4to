@@ -25,6 +25,11 @@ const SESSION_DRAFT_PREFIX = "html_editor_aislado_session_draft_v2__";
 const ACTIVE_PROJECT_PREFIX = "html_editor_aislado_active_project_v2__";
 const USER_PROJECTS_PREFIX = "html_editor_aislado_projects_v2__";
 const AUTO_SAVE_DELAY_MS = 1200;
+const PREVIEW_DEBOUNCE_MS = 260;
+const LARGE_DOCUMENT_CHAR_LIMIT = 18000;
+const LARGE_DOCUMENT_LINE_LIMIT = 450;
+const AUTOCOMPLETE_CHAR_LIMIT = 12000;
+const AUTOCOMPLETE_LINE_LIMIT = 260;
 
 const defaultHtmlCode = `<!doctype html>
 <html>
@@ -132,12 +137,85 @@ const jsSnippets = [
   { label: "array.map", insert: "$0.map((item) => {\n  return item;\n});" }
 ];
 
-const imageResources = [
-  { label: "Bosques 1", alt: "Bosque verde", url: "https://i.ibb.co/dwfcKspS/BOSQUES.jpg" },
-  { label: "Bosques 2", alt: "Bosque con montanas", url: "https://i.ibb.co/4nQjGmyX/BOSQUES2.jpg" },
-  { label: "Axolote", alt: "Axolote en el agua", url: "https://i.ibb.co/WvQD0fRg/axolote.jpg" },
-  { label: "Cebras", alt: "Grupo de cebras", url: "https://i.ibb.co/7NWJnPQ8/cebras.jpg" },
-  { label: "Mapache", alt: "Mapache en primer plano", url: "https://i.ibb.co/fYsWp2Wc/mapache.jpg" }
+const bundledResourcePaths = [
+  "recursos/imagenes/Berners.jpeg",
+  "recursos/imagenes/Dennis_Ritchie.png",
+  "recursos/imagenes/Hollerith.png",
+  "recursos/imagenes/Leibniz.png",
+  "recursos/imagenes/Lovelaice.png",
+  "recursos/imagenes/McCarthy.jpeg",
+  "recursos/imagenes/Pascal.jpeg",
+  "recursos/imagenes/README.txt",
+  "recursos/imagenes/Thomson.jpeg",
+  "recursos/imagenes/Turing.jpeg",
+  "recursos/imagenes/babbage.png",
+  "recursos/imagenes/grace.png",
+  "recursos/imagenes/shannon.png",
+  "recursos/imagenes/vonneumann.jpeg",
+  "recursos/imagenes/Dinosaurios/Creatacico/Ankylosaurus.jpeg",
+  "recursos/imagenes/Dinosaurios/Creatacico/Triceratops.jpeg",
+  "recursos/imagenes/Dinosaurios/Creatacico/Tyrannosaurus rex.webp",
+  "recursos/imagenes/Dinosaurios/Creatacico/Velociraptor.jpeg",
+  "recursos/imagenes/Dinosaurios/Jurasico/Allosaurus.jpeg",
+  "recursos/imagenes/Dinosaurios/Jurasico/Brachiosaurus.jpg",
+  "recursos/imagenes/Dinosaurios/Jurasico/Dilophosaurus.webp",
+  "recursos/imagenes/Dinosaurios/Jurasico/Diplodocus.jpeg",
+  "recursos/imagenes/Dinosaurios/Jurasico/Stegosaurus.jpeg",
+  "recursos/imagenes/Dinosaurios/Triasico/Coelophysis.jpeg",
+  "recursos/imagenes/Dinosaurios/Triasico/Eoraptor.jpeg",
+  "recursos/imagenes/Dinosaurios/Triasico/Herrerasaurus.jpeg",
+  "recursos/imagenes/Planetas/Astronauta.jpg",
+  "recursos/imagenes/Planetas/Jupiter.webp",
+  "recursos/imagenes/Planetas/Marte.webp",
+  "recursos/imagenes/Planetas/Mercurio.webp",
+  "recursos/imagenes/Planetas/Neptuno.webp",
+  "recursos/imagenes/Planetas/Saturno.webp",
+  "recursos/imagenes/Planetas/Sol.jpg",
+  "recursos/imagenes/Planetas/Tierra.webp",
+  "recursos/imagenes/Planetas/Urano.webp",
+  "recursos/imagenes/Planetas/Venus.webp",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Búho.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Oso.jpg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Venado.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Zorro.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Camello.webp",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Escorpión.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Serpiente.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Zorro del desierto (fennec).jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/OCÉANO/Delfín.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/OCÉANO/Pulpo.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/OCÉANO/Tiburón.jpg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/OCÉANO/Tortuga marina.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/REGIÓN POLAR/Foca.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/REGIÓN POLAR/Oso polar.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/REGIÓN POLAR/Pingüino.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/REGIÓN POLAR/Zorro ártico.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SABANA/Cebra.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SABANA/Elefante.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SABANA/Jirafa.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SABANA/León.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA (TROPICAL)/Jaguar.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA (TROPICAL)/Mono.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA (TROPICAL)/Rana venenosa.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA (TROPICAL)/Tucán.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA : RÍOS TROPICALES/Anaconda.jpg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA : RÍOS TROPICALES/Caiman.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA : RÍOS TROPICALES/Capibara.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA : RÍOS TROPICALES/Cocodrilo.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/SELVA : RÍOS TROPICALES/Iguana (verde).jpeg",
+  "recursos/audio/Babbage.mp3",
+  "recursos/audio/Berners.mp3",
+  "recursos/audio/Hollerith.mp3",
+  "recursos/audio/Leibniz.mp3",
+  "recursos/audio/Lovelaice.mp3",
+  "recursos/audio/McCarthy.mp3",
+  "recursos/audio/Pascal.mp3",
+  "recursos/audio/README.txt",
+  "recursos/audio/Thompson.mp3",
+  "recursos/audio/Turing.mp3",
+  "recursos/audio/grace-hopper.mp3",
+  "recursos/audio/shannon.mp3",
+  "recursos/audio/vonneumann.mp3"
 ];
 
 const htmlInput = document.getElementById("htmlInput");
@@ -165,8 +243,12 @@ const suggestionList = document.getElementById("suggestionList");
 const progressText = document.getElementById("progressText");
 const savedAtText = document.getElementById("savedAtText");
 const cloudStatusText = document.getElementById("cloudStatusText");
-const imageResourceGrid = document.getElementById("imageResourceGrid");
+const resourceTypeButtons = document.getElementById("resourceTypeButtons");
+const resourceCategoryList = document.getElementById("resourceCategoryList");
+const resourceSearchInput = document.getElementById("resourceSearchInput");
+const resourceLibraryGrid = document.getElementById("resourceLibraryGrid");
 const resourceStatusText = document.getElementById("resourceStatusText");
+const editorPerfText = document.getElementById("editorPerfText");
 const imageUrlInput = document.getElementById("imageUrlInput");
 const insertImageUrlButton = document.getElementById("insertImageUrlButton");
 const signInGoogleButton = document.getElementById("signInGoogleButton");
@@ -200,6 +282,11 @@ let activeProjectId = "";
 let activeProjectName = "";
 let autocompleteState = { items: [], selectedIndex: 0, start: 0, end: 0, visible: false };
 let workspaceResizeCleanup = null;
+let previewTimer = null;
+let visualRefreshFrame = 0;
+let charWidthPx = 0;
+let resourceLibrary = [];
+let resourceFilterState = { type: "all", category: "all", query: "" };
 
 const sessionPlayerId = slugify(params.get("player") || "", 36);
 const sessionDraftKey = `${SESSION_DRAFT_PREFIX}${sessionPlayerId || "anon"}`;
@@ -458,7 +545,7 @@ function setActiveFile(fileId) {
   renderFileTabs();
   renderCodeHighlight();
   refreshSuggestionProgress();
-  renderPreview();
+  renderPreview(true);
 }
 
 function renderFileTabs() {
@@ -493,6 +580,111 @@ function setResourceStatus(message) {
   resourceStatusText.textContent = message;
 }
 
+function setEditorPerfStatus(message, kind = "") {
+  if (!editorPerfText) return;
+  editorPerfText.textContent = message;
+  editorPerfText.classList.remove("ok", "warn");
+  if (kind) editorPerfText.classList.add(kind);
+}
+
+function encodeResourcePath(path) {
+  return encodeURI(path).replace(/#/g, "%23");
+}
+
+function humanizeResourceName(name = "") {
+  return name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildBundledResourceLibrary(paths = []) {
+  return paths.map((path, index) => {
+    const segments = `${path}`.split("/");
+    const libraryType = segments[1] === "audio" ? "audio" : segments.at(-1)?.toLowerCase().endsWith(".txt") ? "documento" : "imagen";
+    const fileName = segments[segments.length - 1] || `Recurso ${index + 1}`;
+    const category = segments.slice(2, -1).join(" / ") || (segments[1] === "audio" ? "Audio" : "General");
+    const label = humanizeResourceName(fileName);
+    return {
+      id: `resource_${index + 1}`,
+      type: libraryType,
+      label,
+      alt: label || "Recurso",
+      category,
+      path,
+      url: encodeResourcePath(path),
+      extension: fileName.split(".").pop()?.toLowerCase() || ""
+    };
+  });
+}
+
+function getResourceTypeLabel(type) {
+  if (type === "imagen") return "Imagenes";
+  if (type === "audio") return "Audios";
+  if (type === "documento") return "Documentos";
+  return "Todo";
+}
+
+function getFilteredResources() {
+  const query = slugify(resourceFilterState.query || "", 80);
+  return resourceLibrary.filter((resource) => {
+    const typeOk = resourceFilterState.type === "all" || resource.type === resourceFilterState.type;
+    const categoryOk = resourceFilterState.category === "all" || resource.category === resourceFilterState.category;
+    const haystack = slugify(`${resource.label} ${resource.category}`, 160);
+    const queryOk = !query || haystack.includes(query);
+    return typeOk && categoryOk && queryOk;
+  });
+}
+
+function renderResourceTypeButtons() {
+  if (!resourceTypeButtons) return;
+  const types = ["all", "imagen", "audio", "documento"];
+  resourceTypeButtons.innerHTML = "";
+  for (const type of types) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `resource-filter-chip${resourceFilterState.type === type ? " is-active" : ""}`;
+    button.textContent = getResourceTypeLabel(type);
+    button.addEventListener("click", () => {
+      resourceFilterState.type = type;
+      if (resourceFilterState.category !== "all") {
+        const categories = new Set(getFilteredResources().map((resource) => resource.category));
+        if (!categories.has(resourceFilterState.category)) resourceFilterState.category = "all";
+      }
+      renderResourceLibrary();
+    });
+    resourceTypeButtons.appendChild(button);
+  }
+}
+
+function renderResourceCategories(filteredResources = getFilteredResources()) {
+  if (!resourceCategoryList) return;
+  const categories = ["all", ...new Set(filteredResources.map((resource) => resource.category))];
+  resourceCategoryList.innerHTML = "";
+  for (const category of categories) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `resource-filter-chip${resourceFilterState.category === category ? " is-active" : ""}`;
+    button.textContent = category === "all" ? "Todas las categorias" : category;
+    button.addEventListener("click", () => {
+      resourceFilterState.category = category;
+      renderResourceLibrary();
+    });
+    resourceCategoryList.appendChild(button);
+  }
+}
+
+function getResourceSnippet(resource) {
+  if (resource.type === "audio") {
+    return `\n<audio controls src="${resource.url}"></audio>$0`;
+  }
+  if (resource.type === "documento") {
+    return `\n<a href="${resource.url}" target="_blank" rel="noopener noreferrer">${resource.label}</a>$0`;
+  }
+  return `\n<img src="${resource.url}" alt="${resource.alt}" />$0`;
+}
+
 function ensureHtmlFileActive() {
   const currentFile = getActiveFile();
   if (currentFile?.type === "html") return true;
@@ -502,10 +694,10 @@ function ensureHtmlFileActive() {
   return true;
 }
 
-function insertImageResource(resource) {
+function insertLibraryResource(resource) {
   if (!htmlInput || !resource || typeof resource.url !== "string") return;
   if (!ensureHtmlFileActive()) {
-    setResourceStatus("Crea un archivo .html para insertar imagenes.");
+    setResourceStatus("Crea o activa un archivo .html para insertar recursos.");
     return;
   }
 
@@ -514,14 +706,13 @@ function insertImageResource(resource) {
   const end = htmlInput.selectionEnd ?? start;
   const before = htmlInput.value.slice(Math.max(0, start - 1), start);
   const prefix = before && before !== "\n" ? "\n" : "";
-  const snippet = `${prefix}<img src="${resource.url}" alt="${resource.alt}" />$0`;
+  const snippet = `${prefix}${getResourceSnippet(resource).trimStart()}`;
   insertIntoEditor(snippet, start, end);
   updateActiveFileFromInput();
-  renderCodeHighlight();
-  renderPreview();
+  scheduleVisualRefresh(true);
   refreshSuggestionProgress();
   scheduleAutoSaveLocal();
-  setResourceStatus(`Imagen agregada: ${resource.label}`);
+  setResourceStatus(`Recurso agregado: ${resource.label}`);
 }
 
 function getImageAltFromLabel(label = "") {
@@ -557,7 +748,7 @@ function insertImageTagFromUrl(rawUrl, label = "Imagen externa") {
     return false;
   }
 
-  insertImageResource({
+  insertLibraryResource({
     label,
     alt: getImageAltFromLabel(label),
     url: normalizedUrl
@@ -565,31 +756,51 @@ function insertImageTagFromUrl(rawUrl, label = "Imagen externa") {
   return true;
 }
 
-function renderImageResources() {
-  if (!imageResourceGrid) return;
-  imageResourceGrid.innerHTML = "";
+function renderResourceLibrary() {
+  if (!resourceLibraryGrid) return;
+  const filteredResources = getFilteredResources();
+  renderResourceTypeButtons();
+  renderResourceCategories(filteredResources);
+  resourceLibraryGrid.innerHTML = "";
 
-  for (const resource of imageResources) {
+  for (const resource of filteredResources) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "image-resource-card";
-    button.setAttribute("aria-label", `Insertar imagen ${resource.label}`);
+    button.setAttribute("aria-label", `Insertar recurso ${resource.label}`);
 
-    const thumb = document.createElement("img");
-    thumb.className = "image-resource-thumb";
-    thumb.src = resource.url;
-    thumb.alt = resource.alt;
-    thumb.loading = "lazy";
+    let media;
+    if (resource.type === "imagen") {
+      const thumb = document.createElement("img");
+      thumb.className = "image-resource-thumb";
+      thumb.src = resource.url;
+      thumb.alt = resource.alt;
+      thumb.loading = "lazy";
+      media = thumb;
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "resource-placeholder";
+      placeholder.textContent = resource.type === "audio" ? "AUDIO" : "DOC";
+      media = placeholder;
+    }
 
     const label = document.createElement("span");
     label.className = "image-resource-label";
-    label.textContent = resource.label;
+    label.textContent = `${resource.label} · ${getResourceTypeLabel(resource.type)}`;
 
-    button.append(thumb, label);
+    const meta = document.createElement("span");
+    meta.className = "resource-card-meta";
+    meta.textContent = resource.category;
+
+    button.append(media, label, meta);
     button.addEventListener("click", () => {
-      insertImageResource(resource);
+      insertLibraryResource(resource);
     });
-    imageResourceGrid.appendChild(button);
+    resourceLibraryGrid.appendChild(button);
+  }
+
+  if (!filteredResources.length) {
+    setResourceStatus("No hay recursos que coincidan con la busqueda actual.");
   }
 }
 
@@ -599,6 +810,36 @@ function injectInHtml(html, marker, chunk) {
   const idx = lower.lastIndexOf(marker);
   if (idx >= 0) return `${html.slice(0, idx)}${chunk}\n${html.slice(idx)}`;
   return `${html}\n${chunk}`;
+}
+
+function getDocumentMetrics(code = "") {
+  const text = `${code || ""}`;
+  return {
+    chars: text.length,
+    lines: (text.match(/\n/g)?.length || 0) + 1
+  };
+}
+
+function isLargeDocument(code = "") {
+  const metrics = getDocumentMetrics(code);
+  return metrics.chars >= LARGE_DOCUMENT_CHAR_LIMIT || metrics.lines >= LARGE_DOCUMENT_LINE_LIMIT;
+}
+
+function isAutocompleteHeavy(code = "") {
+  const metrics = getDocumentMetrics(code);
+  return metrics.chars >= AUTOCOMPLETE_CHAR_LIMIT || metrics.lines >= AUTOCOMPLETE_LINE_LIMIT;
+}
+
+function updateEditorPerformanceHint(code = "") {
+  const metrics = getDocumentMetrics(code);
+  if (metrics.chars >= LARGE_DOCUMENT_CHAR_LIMIT || metrics.lines >= LARGE_DOCUMENT_LINE_LIMIT) {
+    setEditorPerfStatus(
+      `Modo rendimiento: activo para texto largo (${metrics.lines} lineas, ${metrics.chars} caracteres).`,
+      "warn"
+    );
+    return;
+  }
+  setEditorPerfStatus(`Modo rendimiento: normal (${metrics.lines} lineas, ${metrics.chars} caracteres).`, "ok");
 }
 
 function buildPreviewDocument() {
@@ -616,10 +857,27 @@ function buildPreviewDocument() {
   return docText;
 }
 
-function renderPreview() {
+function renderPreviewNow() {
   updateActiveFileFromInput();
   if (!previewFrame) return;
   previewFrame.srcdoc = buildPreviewDocument();
+}
+
+function renderPreview(force = false) {
+  if (previewTimer) {
+    window.clearTimeout(previewTimer);
+    previewTimer = null;
+  }
+  const code = htmlInput?.value || "";
+  const delay = force ? 0 : isLargeDocument(code) ? PREVIEW_DEBOUNCE_MS * 2 : PREVIEW_DEBOUNCE_MS;
+  if (delay === 0) {
+    renderPreviewNow();
+    return;
+  }
+  previewTimer = window.setTimeout(() => {
+    previewTimer = null;
+    renderPreviewNow();
+  }, delay);
 }
 
 function getSuggestionMatches(code) {
@@ -698,6 +956,11 @@ function renderLineNumbers() {
   const lines = (htmlInput.value || "").split("\n").length;
   const caret = htmlInput.selectionStart || 0;
   const activeLine = (htmlInput.value.slice(0, caret).match(/\n/g)?.length || 0) + 1;
+  if (isLargeDocument(htmlInput.value || "")) {
+    lineNumbers.innerHTML = `<div class="line-number active">${activeLine}</div><div class="line-number-summary">de ${lines}</div>`;
+    lineNumbers.scrollTop = 0;
+    return;
+  }
   let html = "";
   for (let i = 1; i <= lines; i += 1) {
     html += `<div class="line-number${i === activeLine ? " active" : ""}">${i}</div>`;
@@ -710,7 +973,9 @@ function renderCodeHighlight() {
   if (!codeHighlight || !htmlInput) return;
   const file = getActiveFile();
   const code = htmlInput.value || "";
-  if (!file || file.type === "html") {
+  if (isLargeDocument(code)) {
+    codeHighlight.innerHTML = `${escapeHtml(code)}\n`;
+  } else if (!file || file.type === "html") {
     codeHighlight.innerHTML = `${highlightHtml(code)}\n`;
   } else if (file.type === "css") {
     codeHighlight.innerHTML = `${highlightCss(code)}\n`;
@@ -720,6 +985,16 @@ function renderCodeHighlight() {
   codeHighlight.scrollTop = htmlInput.scrollTop;
   codeHighlight.scrollLeft = htmlInput.scrollLeft;
   renderLineNumbers();
+  updateEditorPerformanceHint(code);
+}
+
+function scheduleVisualRefresh(includePreview = false) {
+  if (visualRefreshFrame) window.cancelAnimationFrame(visualRefreshFrame);
+  visualRefreshFrame = window.requestAnimationFrame(() => {
+    visualRefreshFrame = 0;
+    renderCodeHighlight();
+    if (includePreview) renderPreview();
+  });
 }
 
 function getWordPrefix(text, pos) {
@@ -848,16 +1123,22 @@ function renderAutocompleteList() {
 }
 
 function getCharWidthPx() {
+  if (charWidthPx) return charWidthPx;
   if (!htmlInput) return 9;
   const style = window.getComputedStyle(htmlInput);
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return 9;
   ctx.font = `${style.fontSize} ${style.fontFamily}`;
-  return Math.max(8, Math.round(ctx.measureText("M").width));
+  charWidthPx = Math.max(8, Math.round(ctx.measureText("M").width));
+  return charWidthPx;
 }
 
 function openAutocomplete() {
+  if (!htmlInput || isAutocompleteHeavy(htmlInput.value || "")) {
+    closeAutocomplete();
+    return;
+  }
   const context = getAutocompleteContext();
   if (!context || !context.items.length) {
     closeAutocomplete();
@@ -881,7 +1162,7 @@ function acceptAutocomplete(index = autocompleteState.selectedIndex) {
   updateActiveFileFromInput();
   renderCodeHighlight();
   refreshSuggestionProgress();
-  renderPreview();
+  renderPreview(true);
   scheduleAutoSaveLocal();
   closeAutocomplete();
 }
@@ -983,7 +1264,7 @@ function autoFixHtmlTypos() {
   htmlInput.setSelectionRange(nextCaret, nextCaret);
   updateActiveFileFromInput();
   renderCodeHighlight();
-  renderPreview();
+  renderPreview(true);
   refreshSuggestionProgress();
   scheduleAutoSaveLocal();
   return true;
@@ -1056,7 +1337,7 @@ function applyOpenedFile(name, code) {
   syncInputFromActiveFile();
   renderFileTabs();
   renderCodeHighlight();
-  renderPreview();
+  renderPreview(true);
   refreshSuggestionProgress();
   if (savedAtText) savedAtText.textContent = "Archivo cargado. Pulsa Guardar progreso para actualizar fecha.";
 }
@@ -1211,7 +1492,7 @@ function applyPayloadToUI(payload) {
   syncInputFromActiveFile();
   renderFileTabs();
   renderCodeHighlight();
-  renderPreview();
+  renderPreview(true);
   refreshSuggestionProgress();
   updateWorkspaceLockState();
   updateCurrentProjectStatus();
@@ -1697,7 +1978,7 @@ if (focusPreviewButton) {
 
 if (runButton) {
   runButton.addEventListener("click", async () => {
-    renderPreview();
+    renderPreview(true);
     refreshSuggestionProgress();
     await saveProgress(false, false, false);
   });
@@ -1749,6 +2030,13 @@ if (imageUrlInput) {
   });
 }
 
+if (resourceSearchInput) {
+  resourceSearchInput.addEventListener("input", () => {
+    resourceFilterState.query = resourceSearchInput.value || "";
+    renderResourceLibrary();
+  });
+}
+
 if (newProjectButton) {
   newProjectButton.addEventListener("click", async () => {
     await createNewProject();
@@ -1782,7 +2070,7 @@ if (resetButton) {
     syncInputFromActiveFile();
     renderFileTabs();
     renderCodeHighlight();
-    renderPreview();
+    renderPreview(true);
     refreshSuggestionProgress();
     if (undoResetButton) undoResetButton.disabled = false;
     await saveProgress(true, true, false);
@@ -1806,7 +2094,7 @@ if (autocompleteButton) {
     htmlInput.value = getAutocompleteBaseByType(file.type);
     updateActiveFileFromInput();
     renderCodeHighlight();
-    renderPreview();
+    renderPreview(true);
     refreshSuggestionProgress();
     scheduleAutoSaveLocal();
     autocompleteButton.textContent = "Base insertada";
@@ -1854,11 +2142,10 @@ if (htmlInput) {
   });
 
   htmlInput.addEventListener("input", () => {
+    if (autoFixHtmlTypos()) return;
     updateActiveFileFromInput();
-    renderCodeHighlight();
-    renderPreview();
+    scheduleVisualRefresh(true);
     refreshSuggestionProgress();
-    autoFixHtmlTypos();
     openAutocomplete();
     scheduleAutoSaveLocal();
   });
@@ -1866,7 +2153,7 @@ if (htmlInput) {
   htmlInput.addEventListener("keydown", async (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "enter") {
       event.preventDefault();
-      renderPreview();
+      renderPreview(true);
       refreshSuggestionProgress();
       await saveProgress(false, false, false);
       return;
@@ -1899,8 +2186,7 @@ if (htmlInput) {
 
     if (maybeAutoCloseHtmlTag(event) || maybeAutoCloseCssBlock(event) || maybeAutoCloseJsBlock(event) || maybeAutoPair(event)) {
       updateActiveFileFromInput();
-      renderCodeHighlight();
-      renderPreview();
+      scheduleVisualRefresh(true);
       refreshSuggestionProgress();
       openAutocomplete();
       scheduleAutoSaveLocal();
@@ -1929,9 +2215,10 @@ if (!htmlInput || !previewFrame) {
   setWorkspaceRatio(0.56);
   bindWorkspaceResizer();
   if (backLink && !backLink.classList.contains("is-disabled")) backLink.href = buildReturnUrl();
-  renderImageResources();
+  resourceLibrary = buildBundledResourceLibrary(bundledResourcePaths);
+  renderResourceLibrary();
   await bootstrapProgress();
   renderCodeHighlight();
-  renderPreview();
+  renderPreview(true);
   refreshSuggestionProgress();
 }

@@ -445,6 +445,14 @@ body::before {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.editor-shell[data-workspace-mode="editor"] .workspace {
+  grid-template-columns: 1fr;
+}
+
+.editor-shell[data-workspace-mode="editor"] .projects-sidebar {
+  display: none;
+}
+
 .editor-shell[data-workspace-mode="editor"] .workspace-controls {
   grid-column: 1;
 }
@@ -522,7 +530,7 @@ label,
 .editor-stack {
   margin-top: 12px;
   position: relative;
-  height: clamp(460px, 68vh, 980px);
+  height: clamp(560px, 76vh, 1280px);
   min-height: 420px;
   resize: vertical;
   border: 1px solid var(--line);
@@ -538,6 +546,10 @@ label,
       rgba(17, 27, 47, 0.62) 29px
     );
   overflow: auto;
+}
+
+.editor-shell[data-workspace-mode="editor"] .editor-stack {
+  height: clamp(700px, 84vh, 1500px);
 }
 
 #codeHighlight,
@@ -600,6 +612,12 @@ label,
 .line-number.active {
   color: #cfe2ff;
   font-weight: 700;
+}
+
+.line-number-summary {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: #8ea8cd;
 }
 
 .token-tag { color: var(--token-tag); }
@@ -702,6 +720,41 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.resource-library-tools {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.resource-type-buttons,
+.resource-category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.resource-filter-chip {
+  background: linear-gradient(180deg, rgba(17, 31, 54, 0.96), rgba(9, 19, 34, 0.96));
+  border: 1px solid rgba(97, 211, 255, 0.14);
+  color: #d9ecff;
+}
+
+.resource-filter-chip.is-active {
+  background: linear-gradient(135deg, #4c7dff, #52d9ff);
+  color: #03131f;
+}
+
+#resourceSearchInput {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: rgba(10, 19, 37, 0.96);
+}
+
 .image-import-tools {
   margin-top: 10px;
   display: grid;
@@ -766,6 +819,27 @@ button:disabled {
 .image-resource-label {
   font-size: 0.87rem;
   color: #d7e9ff;
+}
+
+.resource-card-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.resource-placeholder {
+  width: 100%;
+  height: 78px;
+  border-radius: 10px;
+  border: 1px solid rgba(97, 211, 255, 0.14);
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(135deg, rgba(76, 125, 255, 0.24), rgba(82, 217, 255, 0.18)),
+    rgba(10, 19, 37, 0.96);
+  color: #d7ecff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 iframe {

@@ -54,7 +54,7 @@
               <h2>Modo adaptable</h2>
             </div>
             <div class="workspace-mode-buttons">
-              <button id="focusEditorButton" class="workspace-toggle" type="button">Enfoque editor</button>
+              <button id="focusEditorButton" class="workspace-toggle" type="button">Editor amplio</button>
               <button id="splitViewButton" class="workspace-toggle is-active" type="button">Vista dividida</button>
               <button id="focusPreviewButton" class="workspace-toggle" type="button">Enfoque preview</button>
             </div>
@@ -88,11 +88,21 @@
             </div>
             <input id="htmlFileInput" type="file" accept=".html,.htm,.css,.js,text/html,text/css,text/javascript,application/javascript" hidden />
             <p id="hintText" class="hint" hidden>Pista: empieza con &lt;h1&gt;, luego agrega un &lt;p&gt; y una imagen con &lt;img&gt;.</p>
-            <section class="resource-panel" aria-label="Recursos de imagen">
+            <section class="resource-panel" aria-label="Biblioteca digital de recursos">
               <div class="resource-panel-header">
-                <h3>Recursos de imagen</h3>
-                <p>Haz clic en una imagen o pega una URL directa para insertarla como etiqueta &lt;img&gt;.</p>
+                <h3>Biblioteca digital de recursos</h3>
+                <p>Explora archivos locales de <code>recursos</code>, filtra por tema y agrega imagenes, audios o enlaces al editor.</p>
               </div>
+              <div class="resource-library-tools">
+                <div id="resourceTypeButtons" class="resource-type-buttons" aria-label="Tipos de recurso"></div>
+                <input
+                  id="resourceSearchInput"
+                  type="search"
+                  placeholder="Buscar recurso por nombre o categoria"
+                  aria-label="Buscar recurso"
+                />
+              </div>
+              <div id="resourceCategoryList" class="resource-category-list" aria-label="Categorias de recursos"></div>
               <div class="image-import-tools">
                 <label class="image-url-label" for="imageUrlInput">URL directa de imagen</label>
                 <div class="image-url-row">
@@ -100,8 +110,9 @@
                   <button id="insertImageUrlButton" type="button">Insertar URL</button>
                 </div>
               </div>
-              <div id="imageResourceGrid" class="image-resource-grid"></div>
-              <p id="resourceStatusText" class="saved-at">Selecciona una imagen para agregarla al editor.</p>
+              <div id="resourceLibraryGrid" class="image-resource-grid"></div>
+              <p id="resourceStatusText" class="saved-at">Selecciona un recurso para insertarlo en el editor.</p>
+              <p id="editorPerfText" class="saved-at">Modo rendimiento: normal.</p>
             </section>
           </div>
 
