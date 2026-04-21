@@ -31,6 +31,7 @@ const LARGE_DOCUMENT_CHAR_LIMIT = 18000;
 const LARGE_DOCUMENT_LINE_LIMIT = 450;
 const AUTOCOMPLETE_CHAR_LIMIT = 12000;
 const AUTOCOMPLETE_LINE_LIMIT = 260;
+const FIRESTORE_PUBLISH_SAFE_BYTES = 900000;
 
 const defaultHtmlCode = `<!doctype html>
 <html>
@@ -560,51 +561,8 @@ function buildPreviewDocumentFromFiles(files = []) {
   return docText;
 }
 
-function escapeRegExp(value = "") {
-  return `${value || ""}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function fileToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo."));
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function inlineBundledResourcesInHtml(html = "") {
-  let nextHtml = `${html || ""}`;
-  if (!nextHtml.trim() || typeof window === "undefined") return nextHtml;
-
-  const usedPaths = bundledResourcePaths
-    .filter((path) => !path.toLowerCase().endsWith(".txt"))
-    .map((path) => ({ raw: path, encoded: encodeResourcePath(path) }))
-    .filter(({ raw, encoded }) => nextHtml.includes(raw) || nextHtml.includes(encoded));
-
-  if (!usedPaths.length) return nextHtml;
-
-  for (const resource of usedPaths) {
-    try {
-      const response = await fetch(resource.encoded, { cache: "no-store" });
-      if (!response.ok) continue;
-      const blob = await response.blob();
-      const dataUrl = await fileToDataUrl(blob);
-      if (!dataUrl) continue;
-      const rawPattern = new RegExp(escapeRegExp(resource.raw), "g");
-      const encodedPattern = new RegExp(escapeRegExp(resource.encoded), "g");
-      nextHtml = nextHtml.replace(rawPattern, dataUrl).replace(encodedPattern, dataUrl);
-    } catch (error) {
-      console.warn("Editor HTML Kids inline asset:", resource.encoded, error);
-    }
-  }
-
-  return nextHtml;
-}
-
 async function buildPublishedDocumentFromFiles(files = []) {
-  const previewHtml = buildPreviewDocumentFromFiles(files);
-  return inlineBundledResourcesInHtml(previewHtml);
+  return buildPreviewDocumentFromFiles(files);
 }
 
 function getActiveFile() {
@@ -1642,6 +1600,59 @@ function getErrorCode(error) {
   return typeof error.code === "string" ? error.code : "";
 }
 
+function getFirebaseErrorMessage(error, context = "generic") {
+  const code = getErrorCode(error);
+  if (!code) {
+    if (context === "publish") return "No se pudo publicar la pagina.";
+    if (context === "sign-in") return "No se pudo iniciar sesion con Google.";
+    return "Ocurrio un error de Firebase.";
+  }
+
+  if (context === "sign-in") {
+    if (code === "auth/unauthorized-domain") {
+      return "Google bloqueo el acceso: este dominio no esta autorizado en Firebase Authentication.";
+    }
+    if (code === "auth/operation-not-allowed") {
+      return "Google Sign-In no esta activado en Firebase Authentication.";
+    }
+    if (code === "auth/popup-blocked") {
+      return "El navegador bloqueo la ventana emergente de Google.";
+    }
+    if (code === "auth/popup-closed-by-user") {
+      return "Se cerro la ventana de acceso antes de completar el inicio de sesion.";
+    }
+  }
+
+  if (context === "publish") {
+    if (code === "permission-denied") {
+      return "Publicacion bloqueada por permisos de Firestore.";
+    }
+    if (code === "unauthenticated") {
+      return "Publicacion bloqueada: la sesion ya no es valida.";
+    }
+    if (code === "unavailable") {
+      return "Firebase no esta disponible en este momento.";
+    }
+    if (code === "failed-precondition") {
+      return "Firebase rechazo la publicacion por una configuracion incompleta.";
+    }
+  }
+
+  return `${context === "publish" ? "No se pudo publicar la pagina" : "No se pudo iniciar sesion con Google"} (${code}).`;
+}
+
+function getTextSizeBytes(value = "") {
+  try {
+    return new TextEncoder().encode(`${value || ""}`).length;
+  } catch {
+    return `${value || ""}`.length;
+  }
+}
+
+function formatBytesAsKb(bytes = 0) {
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 function getIsoTime(isoDate) {
   const ms = Date.parse(isoDate || "");
   return Number.isNaN(ms) ? 0 : ms;
@@ -2002,6 +2013,17 @@ async function publishCurrentProject() {
   const pageId = activePublishedPageId || createPublishedPageId(payload.projectId);
   const nowIso = new Date().toISOString();
   const publishedHtml = await buildPublishedDocumentFromFiles(payload.files);
+  const publishedHtmlBytes = getTextSizeBytes(publishedHtml);
+  if (publishedHtmlBytes > FIRESTORE_PUBLISH_SAFE_BYTES) {
+    if (publishStatusText) {
+      publishStatusText.textContent =
+        `La pagina es demasiado pesada para publicarla (${formatBytesAsKb(publishedHtmlBytes)}). ` +
+        "Reduce contenido incrustado, especialmente imagenes o audios pegados como data URL/base64.";
+      publishStatusText.classList.remove("ok");
+      publishStatusText.classList.add("warn");
+    }
+    return;
+  }
   const publicRecord = {
     pageId,
     projectId: payload.projectId,
@@ -2036,12 +2058,8 @@ async function publishCurrentProject() {
       }, 1400);
     }
   } catch (error) {
-    const code = getErrorCode(error);
     if (publishStatusText) {
-      publishStatusText.textContent =
-        code === "permission-denied"
-          ? "Publicacion bloqueada por permisos de Firestore."
-          : "No se pudo publicar la pagina.";
+      publishStatusText.textContent = getFirebaseErrorMessage(error, "publish");
       publishStatusText.classList.remove("ok");
       publishStatusText.classList.add("warn");
     }
@@ -2279,7 +2297,7 @@ async function signInWithGoogle() {
     await signInWithPopup(auth, provider);
   } catch (error) {
     if (error?.code === "auth/popup-closed-by-user") return;
-    setAuthStatus("No se pudo iniciar sesion con Google.", "warn");
+    setAuthStatus(getFirebaseErrorMessage(error, "sign-in"), "warn");
     console.warn("Editor HTML Kids Google sign-in:", error);
   }
 }
