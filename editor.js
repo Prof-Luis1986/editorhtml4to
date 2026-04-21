@@ -532,12 +532,23 @@ function getMainHtmlFromFiles(files = []) {
   return htmlFile?.code || defaultHtmlCode;
 }
 
+function getDocumentBaseHref() {
+  if (typeof window === "undefined" || !window.location?.href) return "./";
+  return new URL("./", window.location.href).toString();
+}
+
+function injectBaseHref(html, baseHref = getDocumentBaseHref()) {
+  if (!`${html || ""}`.trim() || !baseHref) return html;
+  if (/<base\b/i.test(html)) return html;
+  return injectInHtml(html, "</head>", `<base href="${baseHref}">`);
+}
+
 function buildPreviewDocumentFromFiles(files = []) {
   const htmlFile = files.find((file) => file.type === "html");
   const cssText = files.filter((file) => file.type === "css").map((file) => file.code).join("\n\n");
   const jsText = files.filter((file) => file.type === "js").map((file) => file.code).join("\n\n");
 
-  let docText = htmlFile?.code || defaultHtmlCode;
+  let docText = injectBaseHref(htmlFile?.code || defaultHtmlCode);
   if (cssText.trim()) {
     docText = injectInHtml(docText, "</head>", `<style>\n${cssText}\n</style>`);
   }

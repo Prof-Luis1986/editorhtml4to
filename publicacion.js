@@ -11,6 +11,26 @@ function setState(title, meta) {
   if (metaElement) metaElement.textContent = meta;
 }
 
+function injectInHtml(html, marker, chunk) {
+  if (!chunk.trim()) return html;
+  const lower = html.toLowerCase();
+  const idx = lower.lastIndexOf(marker);
+  if (idx >= 0) return `${html.slice(0, idx)}${chunk}\n${html.slice(idx)}`;
+  return `${html}\n${chunk}`;
+}
+
+function getDocumentBaseHref() {
+  if (typeof window === "undefined" || !window.location?.href) return "./";
+  return new URL("./", window.location.href).toString();
+}
+
+function preparePublishedHtml(html = "") {
+  const source = `${html || ""}`.trim();
+  if (!source) return "";
+  if (/<base\b/i.test(source)) return source;
+  return injectInHtml(source, "</head>", `<base href="${getDocumentBaseHref()}">`);
+}
+
 async function loadPublishedPage() {
   const pageId = `${params.get("page") || ""}`.trim();
   if (!pageId) {
@@ -43,7 +63,7 @@ async function loadPublishedPage() {
 
     document.title = `${projectName} | Laboratorio HTML Kids`;
     setState(projectName, metaParts.join(" | "));
-    if (publishedFrame) publishedFrame.srcdoc = typeof data.html === "string" ? data.html : "";
+    if (publishedFrame) publishedFrame.srcdoc = preparePublishedHtml(typeof data.html === "string" ? data.html : "");
   } catch (error) {
     console.warn("Publicacion HTML Kids:", error);
     setState("No se pudo cargar la publicacion", "Revisa la configuracion de Firebase y las reglas publicas.");
