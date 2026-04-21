@@ -26,6 +26,7 @@ const ACTIVE_PROJECT_PREFIX = "html_editor_aislado_active_project_v2__";
 const USER_PROJECTS_PREFIX = "html_editor_aislado_projects_v2__";
 const AUTO_SAVE_DELAY_MS = 1200;
 const PREVIEW_DEBOUNCE_MS = 260;
+const VISUAL_REFRESH_HEAVY_DEBOUNCE_MS = 140;
 const LARGE_DOCUMENT_CHAR_LIMIT = 18000;
 const LARGE_DOCUMENT_LINE_LIMIT = 450;
 const AUTOCOMPLETE_CHAR_LIMIT = 12000;
@@ -277,6 +278,7 @@ let firebaseReady = false;
 let cloudWriteLocked = false;
 let currentUser = null;
 let autoSaveTimer = null;
+let visualRefreshTimer = null;
 let skipSaveOnUnload = false;
 let lastResetSnapshot = null;
 let committedSnapshot = null;
@@ -839,7 +841,7 @@ function renderResourceLibrary() {
     header.append(titleWrap, badge);
 
     const grid = document.createElement("div");
-    grid.className = "image-resource-grid";
+    grid.className = "resource-gallery-grid";
 
     for (const resource of section.items) {
       const card = document.createElement("article");
@@ -1123,7 +1125,20 @@ function renderCodeHighlight() {
 }
 
 function scheduleVisualRefresh(includePreview = false) {
+  if (visualRefreshTimer) {
+    window.clearTimeout(visualRefreshTimer);
+    visualRefreshTimer = null;
+  }
   if (visualRefreshFrame) window.cancelAnimationFrame(visualRefreshFrame);
+  const currentCode = htmlInput?.value || "";
+  if (isLargeDocument(currentCode)) {
+    visualRefreshTimer = window.setTimeout(() => {
+      visualRefreshTimer = null;
+      renderCodeHighlight();
+      if (includePreview) renderPreview();
+    }, VISUAL_REFRESH_HEAVY_DEBOUNCE_MS);
+    return;
+  }
   visualRefreshFrame = window.requestAnimationFrame(() => {
     visualRefreshFrame = 0;
     renderCodeHighlight();
