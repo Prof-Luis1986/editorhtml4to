@@ -640,39 +640,89 @@ function humanizeResourceName(name = "") {
     .trim();
 }
 
+function getResourceMatchKey(name = "") {
+  const normalized = slugify(humanizeResourceName(name), 80)
+    .replace(/\bgrace-hopper\b/g, "grace")
+    .replace(/\bthompson\b/g, "thomson")
+    .replace(/\bvon-neumann\b/g, "vonneumann");
+  return normalized;
+}
+
+function getDefaultResourceCategory(segments = []) {
+  if (segments[1] === "audio") return "Padres de la informatica";
+  return "Padres de la informatica";
+}
+
 function buildBundledResourceLibrary(paths = []) {
-  return paths.map((path, index) => {
+  const mergedResources = new Map();
+
+  paths.forEach((path, index) => {
     const segments = `${path}`.split("/");
     const libraryType = segments[1] === "audio" ? "audio" : segments.at(-1)?.toLowerCase().endsWith(".txt") ? "documento" : "imagen";
+    if (libraryType === "documento") return;
     const fileName = segments[segments.length - 1] || `Recurso ${index + 1}`;
-    const category = segments.slice(2, -1).join(" / ") || (segments[1] === "audio" ? "Audio" : "General");
+    const category = segments.slice(2, -1).join(" / ") || getDefaultResourceCategory(segments);
     const label = humanizeResourceName(fileName);
-    return {
+    const extension = fileName.split(".").pop()?.toLowerCase() || "";
+    const matchKey = getResourceMatchKey(fileName);
+    const groupKey = `resource:${matchKey}`;
+    const current = mergedResources.get(groupKey) || {
       id: `resource_${index + 1}`,
       type: libraryType,
       label,
       alt: label || "Recurso",
       category,
+      extension,
       path,
       url: encodeResourcePath(path),
-      extension: fileName.split(".").pop()?.toLowerCase() || ""
+      imageUrl: "",
+      audioUrl: "",
+      imageExtension: "",
+      audioExtension: ""
     };
+
+    if (libraryType === "imagen") {
+      current.type = "imagen";
+      current.label = current.label || label;
+      current.alt = current.alt || label || "Recurso";
+      current.category = category;
+      current.path = path;
+      current.url = encodeResourcePath(path);
+      current.extension = extension;
+      current.imageUrl = encodeResourcePath(path);
+      current.imageExtension = extension;
+    } else if (libraryType === "audio") {
+      current.audioUrl = encodeResourcePath(path);
+      current.audioExtension = extension;
+      if (!current.imageUrl) {
+        current.type = "audio";
+        current.label = current.label || label;
+        current.path = path;
+        current.url = encodeResourcePath(path);
+        current.extension = extension;
+      }
+    }
+
+    mergedResources.set(groupKey, current);
   });
+
+  return Array.from(mergedResources.values()).sort((a, b) => `${a.category} ${a.label}`.localeCompare(`${b.category} ${b.label}`, "es"));
 }
 
 function getResourceTypeLabel(type) {
   if (type === "imagen") return "Imagenes";
-  if (type === "audio") return "Audios";
-  if (type === "documento") return "Documentos";
   return "Todo";
 }
 
 function getFilteredResources() {
   const query = slugify(resourceFilterState.query || "", 80);
   return resourceLibrary.filter((resource) => {
-    const typeOk = resourceFilterState.type === "all" || resource.type === resourceFilterState.type;
+    const typeOk =
+      resourceFilterState.type === "all" ||
+      (resourceFilterState.type === "imagen" && Boolean(resource.imageUrl)) ||
+      (resourceFilterState.type === "audio" && Boolean(resource.audioUrl));
     const categoryOk = resourceFilterState.category === "all" || resource.category === resourceFilterState.category;
-    const haystack = slugify(`${resource.label} ${resource.category}`, 160);
+    const haystack = slugify(`${resource.label} ${resource.category} ${resource.audioUrl ? "audio narracion" : ""}`, 160);
     const queryOk = !query || haystack.includes(query);
     return typeOk && categoryOk && queryOk;
   });
@@ -690,7 +740,7 @@ function groupResourcesByCategory(resources = []) {
 
 function renderResourceTypeButtons() {
   if (!resourceTypeButtons) return;
-  const types = ["all", "imagen", "audio", "documento"];
+  const types = ["all", "imagen"];
   resourceTypeButtons.innerHTML = "";
   for (const type of types) {
     const button = document.createElement("button");
@@ -727,13 +777,10 @@ function renderResourceCategories(filteredResources = getFilteredResources()) {
 }
 
 function getResourceSnippet(resource) {
-  if (resource.type === "audio") {
-    return `\n<audio controls src="${resource.url}"></audio>$0`;
+  if (resource.audioUrl && !resource.imageUrl) {
+    return `\n<audio controls src="${resource.audioUrl}"></audio>$0`;
   }
-  if (resource.type === "documento") {
-    return `\n<a href="${resource.url}" target="_blank" rel="noopener noreferrer">${resource.label}</a>$0`;
-  }
-  return `\n<img src="${resource.url}" alt="${resource.alt}" />$0`;
+  return `\n<img src="${resource.imageUrl || resource.url}" alt="${resource.alt}" />$0`;
 }
 
 function ensureHtmlFileActive() {
@@ -764,6 +811,15 @@ function insertLibraryResource(resource) {
   refreshSuggestionProgress();
   scheduleAutoSaveLocal();
   setResourceStatus(`Recurso agregado: ${resource.label}`);
+}
+
+function insertResourceAudio(resource) {
+  if (!resource?.audioUrl) return;
+  insertLibraryResource({
+    ...resource,
+    type: "audio",
+    url: resource.audioUrl
+  });
 }
 
 function getImageAltFromLabel(label = "") {
@@ -836,7 +892,9 @@ function renderResourceLibrary() {
 
     const badge = document.createElement("span");
     badge.className = "resource-gallery-badge";
-    badge.textContent = getResourceTypeLabel(section.items[0]?.type || "all");
+    badge.textContent = section.items.some((item) => item.audioUrl) && section.items.some((item) => item.imageUrl)
+      ? "Imagen + audio"
+      : getResourceTypeLabel(section.items[0]?.type || "all");
 
     header.append(titleWrap, badge);
 
@@ -851,14 +909,14 @@ function renderResourceLibrary() {
       card.setAttribute("aria-label", `Insertar recurso ${resource.label}`);
 
       let media;
-      if (resource.type === "imagen") {
+      if (resource.imageUrl) {
         const thumb = document.createElement("img");
         thumb.className = "image-resource-thumb";
-        thumb.src = resource.url;
+        thumb.src = resource.imageUrl;
         thumb.alt = resource.alt;
         thumb.loading = "lazy";
         media = thumb;
-      } else if (resource.type === "audio") {
+      } else if (resource.audioUrl) {
         const audioBox = document.createElement("div");
         audioBox.className = "resource-audio-box";
 
@@ -870,29 +928,11 @@ function renderResourceLibrary() {
         audioPlayer.className = "resource-audio-player";
         audioPlayer.controls = true;
         audioPlayer.preload = "none";
-        audioPlayer.src = resource.url;
+        audioPlayer.src = resource.audioUrl;
         audioPlayer.addEventListener("click", (event) => event.stopPropagation());
 
         audioBox.append(audioIcon, audioPlayer);
         media = audioBox;
-      } else {
-        const docBox = document.createElement("div");
-        docBox.className = "resource-doc-box";
-
-        const placeholder = document.createElement("div");
-        placeholder.className = "resource-placeholder is-document";
-        placeholder.textContent = "DOC";
-
-        const openLink = document.createElement("a");
-        openLink.className = "resource-open-link";
-        openLink.href = resource.url;
-        openLink.target = "_blank";
-        openLink.rel = "noopener noreferrer";
-        openLink.textContent = "Abrir";
-        openLink.addEventListener("click", (event) => event.stopPropagation());
-
-        docBox.append(placeholder, openLink);
-        media = docBox;
       }
 
       const content = document.createElement("div");
@@ -900,7 +940,13 @@ function renderResourceLibrary() {
 
       const typePill = document.createElement("span");
       typePill.className = "resource-type-pill";
-      typePill.textContent = getResourceTypeLabel(resource.type);
+      typePill.textContent = resource.imageUrl && resource.audioUrl
+        ? "Imagen + audio"
+        : resource.imageUrl
+          ? getResourceTypeLabel("imagen")
+          : resource.audioUrl
+            ? getResourceTypeLabel("audio")
+            : getResourceTypeLabel(resource.type);
 
       const label = document.createElement("h5");
       label.className = "image-resource-label";
@@ -908,7 +954,23 @@ function renderResourceLibrary() {
 
       const meta = document.createElement("p");
       meta.className = "resource-card-meta";
-      meta.textContent = resource.extension ? `Archivo .${resource.extension}` : "Recurso local";
+      meta.textContent = resource.imageUrl && resource.audioUrl
+        ? `Imagen .${resource.imageExtension} + audio .${resource.audioExtension}`
+        : resource.extension
+          ? `Archivo .${resource.extension}`
+          : "Recurso local";
+
+      if (resource.audioUrl && resource.imageUrl) {
+        const audioPlayer = document.createElement("audio");
+        audioPlayer.className = "resource-audio-player is-inline";
+        audioPlayer.controls = true;
+        audioPlayer.preload = "none";
+        audioPlayer.src = resource.audioUrl;
+        audioPlayer.addEventListener("click", (event) => event.stopPropagation());
+        content.append(typePill, label, meta, audioPlayer);
+      } else {
+        content.append(typePill, label, meta);
+      }
 
       const actions = document.createElement("div");
       actions.className = "resource-card-actions";
@@ -920,14 +982,27 @@ function renderResourceLibrary() {
       const insertButton = document.createElement("button");
       insertButton.type = "button";
       insertButton.className = "resource-insert-button";
-      insertButton.textContent = "Insertar";
+      insertButton.textContent = resource.imageUrl ? "Insertar imagen" : "Insertar";
       insertButton.addEventListener("click", (event) => {
         event.stopPropagation();
         insertLibraryResource(resource);
       });
 
       actions.append(helper, insertButton);
-      content.append(typePill, label, meta, actions);
+
+      if (resource.audioUrl) {
+        const audioButton = document.createElement("button");
+        audioButton.type = "button";
+        audioButton.className = "resource-insert-button is-audio-action";
+        audioButton.textContent = resource.imageUrl ? "Insertar audio" : "Insertar";
+        audioButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          insertResourceAudio(resource);
+        });
+        actions.append(audioButton);
+      }
+
+      content.append(actions);
       card.append(media, content);
 
       card.addEventListener("click", () => {
