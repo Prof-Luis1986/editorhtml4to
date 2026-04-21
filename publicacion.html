@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pagina publicada | Laboratorio HTML Kids</title>
+    <link rel="stylesheet" href="publicacion.css" />
+  </head>
+  <body>
+    <main class="published-shell">
+      <section class="published-card">
+        <p class="eyebrow">Publicacion compartida</p>
+        <h1 id="publishedTitle">Cargando pagina...</h1>
+        <p id="publishedMeta" class="published-meta">Conectando con Firebase...</p>
+        <div class="published-actions">
+          <a class="published-action-link" href="./index.html">Abrir editor</a>
+        </div>
+      </section>
+
+      <section class="published-preview-wrap">
+        <iframe
+          id="publishedFrame"
+          title="Pagina publicada"
+          sandbox="allow-scripts"
+          referrerpolicy="no-referrer"
+        ></iframe>
+      </section>
+    </main>
+
+    <script src="firebase-config.js"></script>
+    <script type="module" src="publicacion.js"></script>
+  </body>
+</html>

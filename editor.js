@@ -255,6 +255,10 @@ const signInGoogleButton = document.getElementById("signInGoogleButton");
 const signOutButton = document.getElementById("signOutButton");
 const authStatusText = document.getElementById("authStatusText");
 const projectStatusText = document.getElementById("projectStatusText");
+const publishStatusText = document.getElementById("publishStatusText");
+const publishedLinkAnchor = document.getElementById("publishedLinkAnchor");
+const publishProjectButton = document.getElementById("publishProjectButton");
+const copyPublishedLinkButton = document.getElementById("copyPublishedLinkButton");
 const clearSessionButton = document.getElementById("clearSessionButton");
 const newProjectButton = document.getElementById("newProjectButton");
 const projectsList = document.getElementById("projectsList");
@@ -287,6 +291,8 @@ let visualRefreshFrame = 0;
 let charWidthPx = 0;
 let resourceLibrary = [];
 let resourceFilterState = { type: "all", category: "all", query: "" };
+let activePublishedPageId = "";
+let activePublishedAt = "";
 
 const sessionPlayerId = slugify(params.get("player") || "", 36);
 const sessionDraftKey = `${SESSION_DRAFT_PREFIX}${sessionPlayerId || "anon"}`;
@@ -449,6 +455,13 @@ function formatSavedAt(isoDate) {
   return `Guardado: ${date.toLocaleString("es-ES")}`;
 }
 
+function formatPublishedAt(isoDate) {
+  if (!isoDate) return "";
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("es-ES");
+}
+
 function getFileTypeByName(name = "") {
   const lower = name.toLowerCase();
   if (lower.endsWith(".css")) return "css";
@@ -517,6 +530,21 @@ function ensureFiles(files = []) {
 function getMainHtmlFromFiles(files = []) {
   const htmlFile = files.find((file) => file.type === "html");
   return htmlFile?.code || defaultHtmlCode;
+}
+
+function buildPreviewDocumentFromFiles(files = []) {
+  const htmlFile = files.find((file) => file.type === "html");
+  const cssText = files.filter((file) => file.type === "css").map((file) => file.code).join("\n\n");
+  const jsText = files.filter((file) => file.type === "js").map((file) => file.code).join("\n\n");
+
+  let docText = htmlFile?.code || defaultHtmlCode;
+  if (cssText.trim()) {
+    docText = injectInHtml(docText, "</head>", `<style>\n${cssText}\n</style>`);
+  }
+  if (jsText.trim()) {
+    docText = injectInHtml(docText, "</body>", `<script>\n${jsText}\n<\/script>`);
+  }
+  return docText;
 }
 
 function getActiveFile() {
@@ -949,18 +977,7 @@ function updateEditorPerformanceHint(code = "") {
 }
 
 function buildPreviewDocument() {
-  const htmlFile = editorFiles.find((file) => file.type === "html");
-  const cssText = editorFiles.filter((file) => file.type === "css").map((file) => file.code).join("\n\n");
-  const jsText = editorFiles.filter((file) => file.type === "js").map((file) => file.code).join("\n\n");
-
-  let docText = htmlFile?.code || defaultHtmlCode;
-  if (cssText.trim()) {
-    docText = injectInHtml(docText, "</head>", `<style>\n${cssText}\n</style>`);
-  }
-  if (jsText.trim()) {
-    docText = injectInHtml(docText, "</body>", `<script>\n${jsText}\n<\/script>`);
-  }
-  return docText;
+  return buildPreviewDocumentFromFiles(editorFiles);
 }
 
 function renderPreviewNow() {
@@ -1499,6 +1516,8 @@ function normalizePayload(rawPayload) {
     lastSavedAtMs: Number.isFinite(payload.lastSavedAtMs) ? payload.lastSavedAtMs : getIsoTime(lastSavedAt),
     projectId,
     projectName: normalizeText(payload.projectName || "", 40) || "Proyecto",
+    publishedPageId: slugify(payload.publishedPageId || "", 80),
+    publishedAt: typeof payload.publishedAt === "string" ? payload.publishedAt : "",
     ownerUid: normalizeText(payload.ownerUid || "", 128),
     ownerEmail: normalizeText(payload.ownerEmail || "", 120),
     ownerName: normalizeText(payload.ownerName || "", 120)
@@ -1525,6 +1544,8 @@ function createBlankProjectPayload(projectName = "") {
     lastSavedAtMs: Date.now(),
     projectId: createProjectId(),
     projectName: safeName,
+    publishedPageId: "",
+    publishedAt: "",
     ownerUid: currentUser?.uid || "",
     ownerEmail: currentUser?.email || "",
     ownerName: currentUser?.displayName || ""
@@ -1586,12 +1607,69 @@ function updateCurrentProjectStatus() {
   setProjectStatus(`Proyecto activo: ${projectLabel}.`, activeProjectId ? "ok" : "");
 }
 
+function getPublishedPageDoc(pageId) {
+  return doc(db, "publishedPages", pageId);
+}
+
+function createPublishedPageId(projectId = "") {
+  const base = slugify(projectId || activeProjectId || createProjectId(), 60) || createProjectId();
+  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getPublishedPageUrl(pageId = activePublishedPageId) {
+  if (!pageId || typeof window === "undefined") return "";
+  return new URL(`publicacion.html?page=${encodeURIComponent(pageId)}`, window.location.href).toString();
+}
+
+function updatePublishStatus() {
+  const publishedUrl = getPublishedPageUrl();
+  if (publishProjectButton) publishProjectButton.disabled = !currentUser;
+  if (copyPublishedLinkButton) copyPublishedLinkButton.disabled = !currentUser || !activePublishedPageId;
+
+  if (!publishStatusText) return;
+
+  if (!currentUser) {
+    publishStatusText.textContent = "Publicacion: inicia sesion para compartir la pagina.";
+    publishStatusText.classList.remove("ok");
+    publishStatusText.classList.add("warn");
+    if (publishedLinkAnchor) {
+      publishedLinkAnchor.hidden = true;
+      publishedLinkAnchor.removeAttribute("href");
+    }
+    return;
+  }
+
+  if (!activePublishedPageId) {
+    publishStatusText.textContent = "Publicacion: aun no publicada.";
+    publishStatusText.classList.remove("ok");
+    publishStatusText.classList.add("warn");
+    if (publishedLinkAnchor) {
+      publishedLinkAnchor.hidden = true;
+      publishedLinkAnchor.removeAttribute("href");
+    }
+    return;
+  }
+
+  const publishedAtLabel = formatPublishedAt(activePublishedAt);
+  publishStatusText.textContent = publishedAtLabel
+    ? `Publicacion lista. Ultima publicacion: ${publishedAtLabel}.`
+    : "Publicacion lista para compartir.";
+  publishStatusText.classList.remove("warn");
+  publishStatusText.classList.add("ok");
+  if (publishedLinkAnchor) {
+    publishedLinkAnchor.hidden = false;
+    publishedLinkAnchor.href = publishedUrl;
+  }
+}
+
 function applyPayloadToUI(payload) {
   const normalized = normalizePayload(payload);
   editorFiles = cloneFiles(normalized.files);
   activeFileId = normalized.activeFileId;
   activeProjectId = normalized.projectId;
   activeProjectName = normalizeText(normalized.projectName || "Proyecto", 40) || "Proyecto";
+  activePublishedPageId = normalized.publishedPageId || "";
+  activePublishedAt = normalized.publishedAt || "";
   if (!editorFiles.find((file) => file.id === activeFileId) && editorFiles[0]) {
     activeFileId = editorFiles[0].id;
   }
@@ -1602,6 +1680,7 @@ function applyPayloadToUI(payload) {
   refreshSuggestionProgress();
   updateWorkspaceLockState();
   updateCurrentProjectStatus();
+  updatePublishStatus();
   if (savedAtText) savedAtText.textContent = formatSavedAt(normalized.lastSavedAt);
   renderProjectsList();
 }
@@ -1618,6 +1697,8 @@ function buildPayloadFromUI() {
     lastSavedAtMs: now.getTime(),
     projectId: activeProjectId || createProjectId(),
     projectName: normalizeText(activeProjectName || "Proyecto", 40) || "Proyecto",
+    publishedPageId: activePublishedPageId || "",
+    publishedAt: activePublishedAt || "",
     ownerUid: currentUser?.uid || "",
     ownerEmail: currentUser?.email || "",
     ownerName: currentUser?.displayName || ""
@@ -1637,8 +1718,11 @@ function saveLocal(payload) {
   saveProjectsStore(currentUser.uid, store);
   activeProjectId = normalized.projectId;
   activeProjectName = normalized.projectName || activeProjectName || "Proyecto";
+  activePublishedPageId = normalized.publishedPageId || "";
+  activePublishedAt = normalized.publishedAt || "";
   writeSessionValue(getActiveProjectStorageKey(currentUser.uid), normalized.projectId);
   if (savedAtText) savedAtText.textContent = formatSavedAt(normalized.lastSavedAt);
+  updatePublishStatus();
   renderProjectsList();
 }
 
@@ -1756,6 +1840,86 @@ async function saveRemote(payload) {
   }
 }
 
+async function publishCurrentProject() {
+  if (!currentUser) {
+    setAuthStatus("Inicia sesion con Google para publicar tu pagina.", "warn");
+    return;
+  }
+  if (!firebaseReady || !db || cloudWriteLocked) {
+    setCloudStatus("no disponible para publicar");
+    return;
+  }
+
+  const payload = buildPayloadFromUI();
+  const pageId = activePublishedPageId || createPublishedPageId(payload.projectId);
+  const nowIso = new Date().toISOString();
+  const publicRecord = {
+    pageId,
+    projectId: payload.projectId,
+    projectName: payload.projectName,
+    ownerUid: currentUser.uid,
+    ownerName: currentUser.displayName || "",
+    ownerEmail: currentUser.email || "",
+    html: buildPreviewDocumentFromFiles(payload.files),
+    publishedAt: activePublishedAt || nowIso,
+    updatedAt: nowIso,
+    updatedAtMs: Date.now(),
+    serverUpdatedAt: serverTimestamp()
+  };
+
+  try {
+    await setDoc(getPublishedPageDoc(pageId), publicRecord, { merge: true });
+    const nextPayload = normalizePayload({
+      ...payload,
+      publishedPageId: pageId,
+      publishedAt: publicRecord.publishedAt
+    });
+    activePublishedPageId = pageId;
+    activePublishedAt = publicRecord.publishedAt;
+    saveLocal(nextPayload);
+    committedSnapshot = clonePayload(nextPayload);
+    await saveRemote(nextPayload);
+    updatePublishStatus();
+    if (publishProjectButton) {
+      publishProjectButton.textContent = "Pagina publicada";
+      window.setTimeout(() => {
+        if (publishProjectButton) publishProjectButton.textContent = "Publicar pagina";
+      }, 1400);
+    }
+  } catch (error) {
+    const code = getErrorCode(error);
+    if (publishStatusText) {
+      publishStatusText.textContent =
+        code === "permission-denied"
+          ? "Publicacion bloqueada por permisos de Firestore."
+          : "No se pudo publicar la pagina.";
+      publishStatusText.classList.remove("ok");
+      publishStatusText.classList.add("warn");
+    }
+    console.warn("Editor HTML Kids publish:", error);
+  }
+}
+
+async function copyPublishedLink() {
+  const publishedUrl = getPublishedPageUrl();
+  if (!publishedUrl) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(publishedUrl);
+    } else {
+      window.prompt("Copia este enlace", publishedUrl);
+    }
+    if (copyPublishedLinkButton) {
+      copyPublishedLinkButton.textContent = "Enlace copiado";
+      window.setTimeout(() => {
+        if (copyPublishedLinkButton) copyPublishedLinkButton.textContent = "Copiar enlace";
+      }, 1200);
+    }
+  } catch {
+    window.prompt("Copia este enlace", publishedUrl);
+  }
+}
+
 function renderProjectsList() {
   if (!projectsList) return;
   projectsList.innerHTML = "";
@@ -1828,6 +1992,8 @@ function updateWorkspaceLockState() {
   if (clearSessionButton) clearSessionButton.disabled = !unlocked;
   if (signInGoogleButton) signInGoogleButton.disabled = unlocked;
   if (insertImageUrlButton) insertImageUrlButton.disabled = !unlocked;
+  if (publishProjectButton) publishProjectButton.disabled = !unlocked;
+  if (copyPublishedLinkButton) copyPublishedLinkButton.disabled = !unlocked || !activePublishedPageId;
   if (imageUrlInput) imageUrlInput.disabled = !unlocked;
 
   if (!unlocked) {
@@ -1836,6 +2002,7 @@ function updateWorkspaceLockState() {
   } else {
     setResourceStatus("Selecciona una imagen para agregarla al editor.");
   }
+  updatePublishStatus();
 }
 
 async function hydrateProjectsForCurrentUser() {
@@ -1887,6 +2054,8 @@ function getSignedOutPayload() {
     lastSavedAtMs: 0,
     projectId: createProjectId(),
     projectName: "Proyecto",
+    publishedPageId: "",
+    publishedAt: "",
     ownerUid: "",
     ownerEmail: "",
     ownerName: ""
@@ -1900,6 +2069,8 @@ async function handleAuthStateChange(user) {
   if (!currentUser) {
     activeProjectId = "";
     activeProjectName = "";
+    activePublishedPageId = "";
+    activePublishedAt = "";
     applyPayloadToUI(getSignedOutPayload());
     committedSnapshot = clonePayload(buildPayloadFromUI());
     setAuthStatus("Sin iniciar sesión.", "warn");
@@ -2093,6 +2264,18 @@ if (runButton) {
 if (saveButton) {
   saveButton.addEventListener("click", async () => {
     await saveProgress(true, true);
+  });
+}
+
+if (publishProjectButton) {
+  publishProjectButton.addEventListener("click", async () => {
+    await publishCurrentProject();
+  });
+}
+
+if (copyPublishedLinkButton) {
+  copyPublishedLinkButton.addEventListener("click", async () => {
+    await copyPublishedLink();
   });
 }
 

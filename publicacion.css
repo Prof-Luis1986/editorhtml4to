@@ -1,0 +1,106 @@
+:root {
+  --bg: #04111d;
+  --panel: rgba(7, 18, 34, 0.9);
+  --line: rgba(107, 201, 255, 0.2);
+  --text: #ecf7ff;
+  --muted: #99b6cf;
+  --accent: #61d3ff;
+  --shadow: 0 26px 70px rgba(2, 8, 24, 0.42);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(97, 211, 255, 0.18), transparent 24%),
+    radial-gradient(circle at 85% 20%, rgba(94, 234, 212, 0.16), transparent 18%),
+    linear-gradient(145deg, #03050d, #09101f 42%, #061325 74%, #04070f);
+}
+
+.published-shell {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+  padding: 22px;
+}
+
+.published-card,
+.published-preview-wrap {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.published-card {
+  padding: 22px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(97, 211, 255, 0.24);
+  border-radius: 999px;
+  color: #c6f3ff;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(16, 32, 61, 0.65);
+}
+
+h1 {
+  margin: 0;
+  font-family: "Arial Black", "Segoe UI", sans-serif;
+  font-size: clamp(1.7rem, 3vw, 2.6rem);
+}
+
+.published-meta {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.published-actions {
+  margin-top: 14px;
+}
+
+.published-action-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #80e7ff, #4fe7bd);
+  color: #04111d;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.published-preview-wrap {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+iframe {
+  width: 100%;
+  min-height: 72vh;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+}
+
+@media (max-width: 720px) {
+  .published-shell {
+    padding: 14px;
+  }
+
+  iframe {
+    min-height: 56vh;
+  }
+}
