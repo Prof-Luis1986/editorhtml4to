@@ -560,6 +560,53 @@ function buildPreviewDocumentFromFiles(files = []) {
   return docText;
 }
 
+function escapeRegExp(value = "") {
+  return `${value || ""}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function fileToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function inlineBundledResourcesInHtml(html = "") {
+  let nextHtml = `${html || ""}`;
+  if (!nextHtml.trim() || typeof window === "undefined") return nextHtml;
+
+  const usedPaths = bundledResourcePaths
+    .filter((path) => !path.toLowerCase().endsWith(".txt"))
+    .map((path) => ({ raw: path, encoded: encodeResourcePath(path) }))
+    .filter(({ raw, encoded }) => nextHtml.includes(raw) || nextHtml.includes(encoded));
+
+  if (!usedPaths.length) return nextHtml;
+
+  for (const resource of usedPaths) {
+    try {
+      const response = await fetch(resource.encoded, { cache: "no-store" });
+      if (!response.ok) continue;
+      const blob = await response.blob();
+      const dataUrl = await fileToDataUrl(blob);
+      if (!dataUrl) continue;
+      const rawPattern = new RegExp(escapeRegExp(resource.raw), "g");
+      const encodedPattern = new RegExp(escapeRegExp(resource.encoded), "g");
+      nextHtml = nextHtml.replace(rawPattern, dataUrl).replace(encodedPattern, dataUrl);
+    } catch (error) {
+      console.warn("Editor HTML Kids inline asset:", resource.encoded, error);
+    }
+  }
+
+  return nextHtml;
+}
+
+async function buildPublishedDocumentFromFiles(files = []) {
+  const previewHtml = buildPreviewDocumentFromFiles(files);
+  return inlineBundledResourcesInHtml(previewHtml);
+}
+
 function getActiveFile() {
   const file = editorFiles.find((item) => item.id === activeFileId);
   if (file) return file;
@@ -1954,6 +2001,7 @@ async function publishCurrentProject() {
   const payload = buildPayloadFromUI();
   const pageId = activePublishedPageId || createPublishedPageId(payload.projectId);
   const nowIso = new Date().toISOString();
+  const publishedHtml = await buildPublishedDocumentFromFiles(payload.files);
   const publicRecord = {
     pageId,
     projectId: payload.projectId,
@@ -1961,7 +2009,7 @@ async function publishCurrentProject() {
     ownerUid: currentUser.uid,
     ownerName: currentUser.displayName || "",
     ownerEmail: currentUser.email || "",
-    html: buildPreviewDocumentFromFiles(payload.files),
+    html: publishedHtml,
     publishedAt: activePublishedAt || nowIso,
     updatedAt: nowIso,
     updatedAtMs: Date.now(),
