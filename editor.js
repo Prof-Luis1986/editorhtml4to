@@ -142,6 +142,7 @@ const jsSnippets = [
 const bundledResourcePaths = [
   "recursos/imagenes/Berners.jpeg",
   "recursos/imagenes/Dennis_Ritchie.png",
+  "recursos/imagenes/Franklin.webp",
   "recursos/imagenes/Hollerith.png",
   "recursos/imagenes/Leibniz.png",
   "recursos/imagenes/Lovelaice.png",
@@ -654,8 +655,15 @@ function getResourceMatchKey(name = "") {
 }
 
 function getDefaultResourceCategory(segments = []) {
-  if (segments[1] === "audio") return "Padres de la informatica";
-  return "Padres de la informatica";
+  const fileName = (segments.at(-1) || "").toLowerCase();
+  const categories = ["Mentes brillantes"];
+  
+  // Solo los pioneros (que no son Franklin) entran en Padres de la informática
+  if (!fileName.includes("franklin")) {
+    categories.push("Padres de la informatica");
+  }
+  
+  return categories;
 }
 
 function buildBundledResourceLibrary(paths = []) {
@@ -666,7 +674,8 @@ function buildBundledResourceLibrary(paths = []) {
     const libraryType = segments[1] === "audio" ? "audio" : segments.at(-1)?.toLowerCase().endsWith(".txt") ? "documento" : "imagen";
     if (libraryType === "documento") return;
     const fileName = segments[segments.length - 1] || `Recurso ${index + 1}`;
-    const category = segments.slice(2, -1).join(" / ") || getDefaultResourceCategory(segments);
+    const categoryRaw = segments.slice(2, -1).join(" / ") || getDefaultResourceCategory(segments);
+    const category = Array.isArray(categoryRaw) ? categoryRaw : [categoryRaw];
     const label = humanizeResourceName(fileName);
     const extension = fileName.split(".").pop()?.toLowerCase() || "";
     const matchKey = getResourceMatchKey(fileName);
@@ -726,8 +735,8 @@ function getFilteredResources() {
       resourceFilterState.type === "all" ||
       (resourceFilterState.type === "imagen" && Boolean(resource.imageUrl)) ||
       (resourceFilterState.type === "audio" && Boolean(resource.audioUrl));
-    const categoryOk = resourceFilterState.category === "all" || resource.category === resourceFilterState.category;
-    const haystack = slugify(`${resource.label} ${resource.category} ${resource.audioUrl ? "audio narracion" : ""}`, 160);
+    const categoryOk = resourceFilterState.category === "all" || resource.category.includes(resourceFilterState.category);
+    const haystack = slugify(`${resource.label} ${resource.category.join(" ")} ${resource.audioUrl ? "audio narracion" : ""}`, 160);
     const queryOk = !query || haystack.includes(query);
     return typeOk && categoryOk && queryOk;
   });
@@ -736,7 +745,13 @@ function getFilteredResources() {
 function groupResourcesByCategory(resources = []) {
   const groups = new Map();
   for (const resource of resources) {
-    const key = resource.category || "General";
+    // Si hay un filtro activo, agrupamos bajo ese nombre. 
+    // Si es "all", usamos la primera categoría del recurso para el encabezado.
+    const activeFilter = resourceFilterState.category;
+    const key = activeFilter !== "all" 
+      ? activeFilter 
+      : (Array.isArray(resource.category) ? resource.category[0] : (resource.category || "General"));
+
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(resource);
   }
@@ -766,7 +781,7 @@ function renderResourceTypeButtons() {
 
 function renderResourceCategories(filteredResources = getFilteredResources()) {
   if (!resourceCategoryList) return;
-  const categories = ["all", ...new Set(filteredResources.map((resource) => resource.category))];
+  const categories = ["all", ...new Set(filteredResources.flatMap((resource) => resource.category))];
   resourceCategoryList.innerHTML = "";
   for (const category of categories) {
     const button = document.createElement("button");
