@@ -181,6 +181,7 @@ const bundledResourcePaths = [
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Oso.jpg",
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Venado.jpeg",
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/Zorro.jpeg",
+  "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/BOSQUE (TEMPLADO)/ajolote.png",
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Camello.webp",
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Escorpión.jpeg",
   "recursos/imagenes/REGIONES DEL MUNDO Y SUS ANIMALES/DESIERTO/Serpiente.jpeg",
