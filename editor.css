@@ -663,6 +663,8 @@ label,
 
 #htmlInput::selection {
   background: #264f78;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
 }
 
 .line-numbers {
@@ -740,6 +742,10 @@ label,
 .autocomplete-list li.active,
 .autocomplete-list li:hover {
   background: #12355c;
+}
+
+.autocomplete-list li.active {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .actions-row {

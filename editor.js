@@ -3,9 +3,10 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   getAuth,
+  getRedirectResult,
   onAuthStateChanged,
   setPersistence,
-  signInWithPopup,
+  signInWithRedirect,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import {
@@ -14,8 +15,6 @@ import {
   getDoc,
   getDocs,
   getFirestore,
-  orderBy,
-  query,
   serverTimestamp,
   setDoc
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
@@ -298,6 +297,7 @@ let resourceLibrary = [];
 let resourceFilterState = { type: "all", category: "all", query: "" };
 let activePublishedPageId = "";
 let activePublishedAt = "";
+const volatileProjectStores = new Map();
 
 const sessionPlayerId = slugify(params.get("player") || "", 36);
 const sessionDraftKey = `${SESSION_DRAFT_PREFIX}${sessionPlayerId || "anon"}`;
@@ -548,15 +548,57 @@ function injectBaseHref(html, baseHref = getDocumentBaseHref()) {
   return injectInHtml(html, "</head>", `<base href="${baseHref}">`);
 }
 
+function getLinkedFileName(tag = "", attribute = "href") {
+  const attributePattern = new RegExp(`${attribute}\\s*=\\s*(["'])(.*?)\\1`, "i");
+  const match = tag.match(attributePattern);
+  const rawPath = (match?.[2] || "").split(/[?#]/, 1)[0];
+  const rawFileName = rawPath.split("/").pop() || "";
+  try {
+    return decodeURIComponent(rawFileName).toLowerCase();
+  } catch {
+    return rawFileName.toLowerCase();
+  }
+}
+
+function injectPreviewStyles(html = "", styleBlock = "") {
+  if (/<\/head\s*>/i.test(html)) {
+    return injectInHtml(html, "</head>", styleBlock);
+  }
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b[^>]*>/i, (headTag) => `${headTag}\n${styleBlock}`);
+  }
+  if (/<body\b[^>]*>/i.test(html)) {
+    return html.replace(/<body\b[^>]*>/i, (bodyTag) => `${styleBlock}\n${bodyTag}`);
+  }
+  const doctypeMatch = html.match(/^\s*<!doctype[^>]*>/i);
+  if (doctypeMatch) {
+    return html.replace(doctypeMatch[0], `${doctypeMatch[0]}\n${styleBlock}`);
+  }
+  return `${styleBlock}\n${html}`;
+}
+
+function inlineVirtualCssFiles(html = "", cssFiles = []) {
+  const filesByName = new Map(cssFiles.map((file) => [file.name.toLowerCase(), file]));
+  const htmlWithoutVirtualLinks = html.replace(/<link\b[^>]*>/gi, (tag) => {
+    return filesByName.has(getLinkedFileName(tag, "href")) ? "" : tag;
+  });
+
+  if (!cssFiles.length) return htmlWithoutVirtualLinks;
+  const cssText = cssFiles.map((file) => `/* ${file.name} */\n${file.code}`).join("\n\n");
+  return injectPreviewStyles(
+    htmlWithoutVirtualLinks,
+    `<style data-virtual-file="all-css-files">\n${cssText}\n</style>`
+  );
+}
+
 function buildPreviewDocumentFromFiles(files = []) {
   const htmlFile = files.find((file) => file.type === "html");
-  const cssText = files.filter((file) => file.type === "css").map((file) => file.code).join("\n\n");
-  const jsText = files.filter((file) => file.type === "js").map((file) => file.code).join("\n\n");
+  const htmlText = htmlFile?.code || defaultHtmlCode;
+  const cssFiles = files.filter((file) => file.type === "css");
+  const jsFiles = files.filter((file) => file.type === "js");
+  const jsText = jsFiles.map((file) => `// ${file.name}\n${file.code}`).join("\n\n");
 
-  let docText = injectBaseHref(htmlFile?.code || defaultHtmlCode);
-  if (cssText.trim()) {
-    docText = injectInHtml(docText, "</head>", `<style>\n${cssText}\n</style>`);
-  }
+  let docText = inlineVirtualCssFiles(injectBaseHref(htmlText), cssFiles);
   if (jsText.trim()) {
     docText = injectInHtml(docText, "</body>", `<script>\n${jsText}\n<\/script>`);
   }
@@ -1287,10 +1329,7 @@ function getAutocompleteContext() {
         .slice(0, 8);
       if (items.length) return { items, start: start - prefix.length, end: start };
     }
-    const prefix = getWordPrefix(text, start).toLowerCase();
-    if (!prefix) return null;
-    const items = htmlSnippets.filter((item) => item.label.startsWith(prefix)).slice(0, 8);
-    return items.length ? { items, start: start - prefix.length, end: start } : null;
+    return null;
   }
 
   if (file.type === "css") {
@@ -1299,18 +1338,17 @@ function getAutocompleteContext() {
     const closeIdx = before.lastIndexOf("}");
     const insideRule = openIdx > closeIdx;
     const prefix = getWordPrefix(text, start).toLowerCase();
-    if (!prefix) {
-      return insideRule
-        ? { items: cssSnippets.slice(0, 12), start, end: start }
-        : { items: cssSnippets.filter((item) => item.insert.includes("{")).slice(0, 8), start, end: start };
-    }
-    const items = cssSnippets.filter((item) => item.label.startsWith(prefix)).slice(0, 14);
+    if (!prefix) return null;
+    const items = cssSnippets
+      .filter((item) => item.label.startsWith(prefix))
+      .filter((item) => insideRule || item.insert.includes("{"))
+      .slice(0, 10);
     return items.length ? { items, start: start - prefix.length, end: start } : null;
   }
 
   const prefix = getWordPrefix(text, start).toLowerCase();
-  if (!prefix) return { items: jsSnippets.slice(0, 10), start, end: start };
-  const items = jsSnippets.filter((item) => item.label.startsWith(prefix)).slice(0, 12);
+  if (!prefix) return null;
+  const items = jsSnippets.filter((item) => item.label.startsWith(prefix)).slice(0, 10);
   return items.length ? { items, start: start - prefix.length, end: start } : null;
 }
 
@@ -1360,6 +1398,13 @@ function renderAutocompleteList() {
     li.textContent = `${item.label}  ->  ${item.insert.replace("$0", "")}`;
     if (index === autocompleteState.selectedIndex) li.classList.add("active");
     li.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      autocompleteState.selectedIndex = index;
+      Array.from(autocompleteList.children).forEach((option, optionIndex) => {
+        option.classList.toggle("active", optionIndex === index);
+      });
+    });
+    li.addEventListener("dblclick", (event) => {
       event.preventDefault();
       acceptAutocomplete(index);
     });
@@ -1747,19 +1792,31 @@ function getActiveProjectStorageKey(uid) {
 
 function getProjectsStore(uid) {
   if (!uid) return { projects: {} };
-  const raw = localStorage.getItem(getUserProjectsStorageKey(uid));
-  if (!raw) return { projects: {} };
+  let raw = null;
+  try {
+    raw = window.localStorage.getItem(getUserProjectsStorageKey(uid));
+  } catch {
+    return volatileProjectStores.get(uid) || { projects: {} };
+  }
+  if (!raw) return volatileProjectStores.get(uid) || { projects: {} };
   try {
     const parsed = JSON.parse(raw);
-    return { projects: parsed?.projects && typeof parsed.projects === "object" ? parsed.projects : {} };
+    const store = { projects: parsed?.projects && typeof parsed.projects === "object" ? parsed.projects : {} };
+    volatileProjectStores.set(uid, store);
+    return store;
   } catch {
-    return { projects: {} };
+    return volatileProjectStores.get(uid) || { projects: {} };
   }
 }
 
 function saveProjectsStore(uid, store) {
   if (!uid) return;
-  localStorage.setItem(getUserProjectsStorageKey(uid), JSON.stringify(store));
+  volatileProjectStores.set(uid, store);
+  try {
+    window.localStorage.setItem(getUserProjectsStorageKey(uid), JSON.stringify(store));
+  } catch {
+    setCloudStatus("sin almacenamiento local");
+  }
 }
 
 function getSavedProjectsForCurrentUser() {
@@ -1938,16 +1995,17 @@ function getProjectDoc(uid, projectId) {
 async function syncProjectsFromCloud() {
   if (!firebaseReady || !db || !currentUser?.uid || cloudWriteLocked) return;
   try {
-    const snap = await getDocs(query(getProjectsCollection(currentUser.uid), orderBy("lastSavedAtMs", "desc")));
+    // No ordenar en Firestore: orderBy excluye proyectos antiguos que no tengan lastSavedAtMs.
+    const snap = await getDocs(getProjectsCollection(currentUser.uid));
     const store = getProjectsStore(currentUser.uid);
     snap.forEach((projectDoc) => {
-      const remotePayload = normalizePayload(projectDoc.data());
+      const remotePayload = normalizePayload({
+        ...projectDoc.data(),
+        projectId: projectDoc.id
+      });
       const localPayload = store.projects[projectDoc.id] ? normalizePayload(store.projects[projectDoc.id]) : null;
       if (!localPayload || (remotePayload.lastSavedAtMs || 0) >= (localPayload.lastSavedAtMs || 0)) {
-        store.projects[projectDoc.id] = {
-          ...remotePayload,
-          projectId: projectDoc.id
-        };
+        store.projects[projectDoc.id] = remotePayload;
       }
     });
     saveProjectsStore(currentUser.uid, store);
@@ -2285,6 +2343,15 @@ async function initFirebase() {
     auth = getAuth(app);
     await setPersistence(auth, browserLocalPersistence);
     firebaseReady = true;
+    try {
+      const redirectResult = await getRedirectResult(auth);
+      if (redirectResult?.user) {
+        setAuthStatus("Acceso con Google completado. Cargando proyectos...", "ok");
+      }
+    } catch (error) {
+      setAuthStatus(getFirebaseErrorMessage(error, "sign-in"), "warn");
+      console.warn("Editor HTML Kids Google redirect:", error);
+    }
     await new Promise((resolve) => {
       let initialAuthEvent = false;
       onAuthStateChanged(auth, async (user) => {
@@ -2310,9 +2377,9 @@ async function signInWithGoogle() {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    await signInWithPopup(auth, provider);
+    setAuthStatus("Abriendo acceso con Google...", "");
+    await signInWithRedirect(auth, provider);
   } catch (error) {
-    if (error?.code === "auth/popup-closed-by-user") return;
     setAuthStatus(getFirebaseErrorMessage(error, "sign-in"), "warn");
     console.warn("Editor HTML Kids Google sign-in:", error);
   }
@@ -2376,7 +2443,11 @@ async function saveProgress(showFeedback = true, forceCloud = true, commitSnapsh
 }
 
 async function bootstrapProgress() {
-  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // La carga en nube debe continuar aunque localStorage no este disponible.
+  }
   applyPayloadToUI(getSignedOutPayload());
   committedSnapshot = clonePayload(buildPayloadFromUI());
   updateWorkspaceLockState();
@@ -2394,7 +2465,8 @@ function createNewFileByType(type) {
     window.alert("Ya existe un archivo con ese nombre.");
     return;
   }
-  const file = createFileRecord(type, fileName, getAutocompleteBaseByType(type));
+  const initialCode = type === "html" ? defaultHtmlCode : "";
+  const file = createFileRecord(type, fileName, initialCode);
   editorFiles.push(file);
   setActiveFile(file.id);
   scheduleAutoSaveLocal();
@@ -2597,12 +2669,11 @@ if (hintButton && hintText) {
 if (htmlInput) {
   htmlInput.addEventListener("focus", () => {
     renderLineNumbers();
-    openAutocomplete();
   });
 
   htmlInput.addEventListener("click", () => {
     renderLineNumbers();
-    openAutocomplete();
+    closeAutocomplete();
   });
 
   htmlInput.addEventListener("scroll", () => {
@@ -2644,10 +2715,13 @@ if (htmlInput) {
         renderAutocompleteList();
         return;
       }
-      if (event.key === "Tab" || event.key === "Enter") {
+      if (event.key === "Tab") {
         event.preventDefault();
         acceptAutocomplete();
         return;
+      }
+      if (event.key === "Enter") {
+        closeAutocomplete();
       }
       if (event.key === "Escape") {
         event.preventDefault();
